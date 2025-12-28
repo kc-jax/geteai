@@ -93,6 +93,29 @@
             margin-top: 2rem;
         }
         
+        .auth-tabs {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 2rem;
+            justify-content: center;
+        }
+        
+        .auth-tabs button {
+            background: transparent;
+            border: 2px solid #00ff41;
+            color: #00ff41;
+            padding: 0.5rem 1.5rem;
+            font-family: 'VT323', monospace;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .auth-tabs button.active {
+            background: #00ff41;
+            color: #0a0a0a;
+        }
+        
         input, textarea {
             width: 100%;
             background: #0a0a0a;
@@ -123,6 +146,12 @@
         
         button.primary:hover {
             box-shadow: 0 0 20px #00ff41;
+        }
+        
+        .error-message {
+            color: #ff4141;
+            margin-top: 1rem;
+            text-shadow: 0 0 10px #ff4141;
         }
         
         #chat-messages {
@@ -200,10 +229,28 @@
         <p style="margin: 2rem 0;">First contact. We come in peace.</p>
         
         <div class="auth-form">
-            <h2>ENTER THE SYSTEM</h2>
-            <input type="text" id="username" placeholder="Choose Username" />
-            <input type="password" id="password" placeholder="Choose Password" />
-            <button class="primary" id="loginBtn">CONNECT</button>
+            <div class="auth-tabs">
+                <button id="signup-tab" class="auth-tab-btn active">SIGN UP</button>
+                <button id="login-tab" class="auth-tab-btn">LOGIN</button>
+            </div>
+            
+            <div id="signup-form" class="auth-form-content">
+                <h2>CREATE ACCOUNT</h2>
+                <input type="text" id="signup-username" placeholder="Choose Username" />
+                <input type="password" id="signup-password" placeholder="Choose Password" />
+                <input type="password" id="signup-password-confirm" placeholder="Confirm Password" />
+                <button class="primary" id="signupBtn">CREATE ACCOUNT</button>
+                <div id="signup-error" class="error-message"></div>
+            </div>
+            
+            <div id="login-form" class="auth-form-content" style="display: none;">
+                <h2>LOGIN</h2>
+                <input type="text" id="login-username" placeholder="Username" />
+                <input type="password" id="login-password" placeholder="Password" />
+                <button class="primary" id="loginBtn">LOGIN</button>
+                <div id="login-error" class="error-message"></div>
+            </div>
+            
             <p style="margin-top: 1rem; font-size: 0.9rem;">Anonymous. No tracking. Your data, your control.</p>
         </div>
     </div>
@@ -267,8 +314,8 @@
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getAuth, signInAnonymously, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-        import { getFirestore, collection, addDoc, query, orderBy, limit, onSnapshot, updateDoc, doc, arrayUnion, getDocs } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { getAuth, signInAnonymously, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+        import { getFirestore, collection, addDoc, query, orderBy, limit, onSnapshot, updateDoc, doc, arrayUnion, getDocs, where } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyAT1u7uOjir-aGTUMU-g4KVvJUXvs_STNc",
@@ -285,28 +332,107 @@
 
         let currentUser = null;
 
-        // AUTH
-        document.getElementById('loginBtn').addEventListener('click', async () => {
-            const username = document.getElementById('username').value.trim();
-            const password = document.getElementById('password').value;
+        // AUTH TABS
+        document.getElementById('signup-tab').addEventListener('click', () => {
+            document.getElementById('signup-form').style.display = 'block';
+            document.getElementById('login-form').style.display = 'none';
+            document.getElementById('signup-tab').classList.add('active');
+            document.getElementById('login-tab').classList.remove('active');
+        });
+
+        document.getElementById('login-tab').addEventListener('click', () => {
+            document.getElementById('login-form').style.display = 'block';
+            document.getElementById('signup-form').style.display = 'none';
+            document.getElementById('login-tab').classList.add('active');
+            document.getElementById('signup-tab').classList.remove('active');
+        });
+
+        // SIGNUP
+        document.getElementById('signupBtn').addEventListener('click', async () => {
+            const username = document.getElementById('signup-username').value.trim();
+            const password = document.getElementById('signup-password').value;
+            const confirm = document.getElementById('signup-password-confirm').value;
+            const errorDiv = document.getElementById('signup-error');
             
-            if (!username || !password) {
-                alert('Please enter both username and password');
+            errorDiv.textContent = '';
+            
+            if (!username || !password || !confirm) {
+                errorDiv.textContent = 'All fields required';
                 return;
             }
-
+            
+            if (password !== confirm) {
+                errorDiv.textContent = 'Passwords do not match';
+                return;
+            }
+            
+            if (password.length < 6) {
+                errorDiv.textContent = 'Password must be at least 6 characters';
+                return;
+            }
+            
+            // Check if username already exists
+            const q = query(collection(db, 'accounts'), where('username', '==', username));
+            const snapshot = await getDocs(q);
+            
+            if (snapshot.docs.length > 0) {
+                errorDiv.textContent = 'Username already taken';
+                return;
+            }
+            
             try {
                 const userCredential = await signInAnonymously(auth);
-                await addDoc(collection(db, 'users'), {
+                await addDoc(collection(db, 'accounts'), {
                     uid: userCredential.user.uid,
                     username: username,
+                    password: password,
                     createdAt: new Date()
                 });
                 currentUser = { uid: userCredential.user.uid, username: username };
                 showMainApp();
             } catch (error) {
-                console.error('Login error:', error);
-                alert('Login failed: ' + error.message);
+                errorDiv.textContent = 'Signup failed: ' + error.message;
+            }
+        });
+
+        // LOGIN
+        document.getElementById('loginBtn').addEventListener('click', async () => {
+            const username = document.getElementById('login-username').value.trim();
+            const password = document.getElementById('login-password').value;
+            const errorDiv = document.getElementById('login-error');
+            
+            errorDiv.textContent = '';
+            
+            if (!username || !password) {
+                errorDiv.textContent = 'Username and password required';
+                return;
+            }
+            
+            try {
+                // Find account with matching username
+                const q = query(collection(db, 'accounts'), where('username', '==', username));
+                const snapshot = await getDocs(q);
+                
+                if (snapshot.docs.length === 0) {
+                    errorDiv.textContent = 'Invalid username or password';
+                    return;
+                }
+                
+                const account = snapshot.docs[0].data();
+                
+                // Check password
+                if (account.password !== password) {
+                    errorDiv.textContent = 'Invalid username or password';
+                    return;
+                }
+                
+                // Login successful
+                const userCredential = await signInAnonymously(auth);
+                currentUser = { uid: userCredential.user.uid, username: username };
+                showMainApp();
+                
+            } catch (error) {
+                errorDiv.textContent = 'Login failed: ' + error.message;
             }
         });
 
@@ -315,6 +441,11 @@
             currentUser = null;
             document.getElementById('auth-section').style.display = 'block';
             document.getElementById('main-app').style.display = 'none';
+            document.getElementById('signup-username').value = '';
+            document.getElementById('signup-password').value = '';
+            document.getElementById('signup-password-confirm').value = '';
+            document.getElementById('login-username').value = '';
+            document.getElementById('login-password').value = '';
         });
 
         function showMainApp() {
@@ -371,7 +502,6 @@
             if (!text) return;
 
             await addDoc(collection(db, 'messages'), {
-                userId: currentUser.uid,
                 username: currentUser.username,
                 text: text,
                 timestamp: new Date()
@@ -396,7 +526,6 @@
             if (!title || !content) return alert('Fill in all fields');
 
             await addDoc(collection(db, 'conversations'), {
-                userId: currentUser.uid,
                 username: currentUser.username,
                 title, content,
                 timestamp: new Date(),
@@ -424,7 +553,6 @@
             if (!title || !content) return alert('Fill in all fields');
 
             await addDoc(collection(db, 'posts'), {
-                userId: currentUser.uid,
                 username: currentUser.username,
                 title, content,
                 timestamp: new Date(),
@@ -452,7 +580,6 @@
             if (!title || !content) return alert('Fill in all fields');
 
             await addDoc(collection(db, 'threads'), {
-                userId: currentUser.uid,
                 username: currentUser.username,
                 title, content,
                 timestamp: new Date(),
@@ -510,18 +637,6 @@
 
             return post;
         }
-
-        // CHECK AUTH STATE
-        onAuthStateChanged(auth, async (user) => {
-            if (user) {
-                const usersSnapshot = await getDocs(collection(db, 'users'));
-                const userData = usersSnapshot.docs.find(doc => doc.data().uid === user.uid);
-                if (userData) {
-                    currentUser = { uid: user.uid, username: userData.data().username };
-                    showMainApp();
-                }
-            }
-        });
     </script>
 </body>
 </html>
