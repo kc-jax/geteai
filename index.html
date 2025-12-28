@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GetEAI - Welcome to the Resistance</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
+        
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: 'VT323', monospace;
+            background: #0a0a0a;
+            color: #00ff41;
+            overflow-x: hidden;
+        }
+        
+        body::before {
+            content: "";
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: repeating-linear-gradient(0deg, rgba(0,255,65,0.03) 0px, transparent 1px, transparent 2px, rgba(0,255,65,0.03) 3px);
+            pointer-events: none;
+            z-index: 1000;
+            animation: scan 8s linear infinite;
+        }
+        
+        @keyframes scan {
+            0% { transform: translateY(0); }
+            100% { transform: translateY(10px); }
+        }
+        
+        .glow { text-shadow: 0 0 10px #00ff41, 0 0 20px #00ff41; }
+        
+        header {
+            padding: 2rem;
+            text-align: center;
+            border-bottom: 2px solid #00ff41;
+            background: rgba(0,0,0,0.8);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        
+        h1 { font-size: 3rem; margin-bottom: 1rem; }
+        
+        nav {
+            display: flex;
+            justify-content: center;
+            gap: 2rem;
+            margin-top: 1rem;
+            flex-wrap: wrap;
+        }
+        
+        nav button {
+            background: transparent;
+            border: 2px solid #00ff41;
+            color: #00ff41;
+            padding: 0.5rem 1.5rem;
+            font-family: 'VT323', monospace;
+            font-size: 1.2rem;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        nav button:hover, nav button.active {
+            background: #00ff41;
+            color: #0a0a0a;
+            box-shadow: 0 0 20px #00ff41;
+        }
+        
+        main { max-width: 1200px; margin: 2rem auto; padding: 2rem; }
+        
+        .section { display: none; animation: fadeIn 0.5s; }
+        .section.active { display: block; }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        
+        #auth-section {
+            text-align: center;
+            max-width: 400px;
+            margin: 4rem auto;
+        }
+        
+        .auth-form {
+            border: 2px solid #00ff41;
+            padding: 2rem;
+            margin-top: 2rem;
+        }
+        
+        input, textarea {
+            width: 100%;
+            background: #0a0a0a;
+            border: 1px solid #00ff41;
+            color: #00ff41;
+            padding: 0.8rem;
+            font-family: 'VT323', monospace;
+            font-size: 1.2rem;
+            margin: 0.5rem 0;
+        }
+        
+        textarea {
+            resize: vertical;
+            min-height: 100px;
+        }
+        
+        button.primary {
+            width: 100%;
+            background: #00ff41;
+            color: #0a0a0a;
+            border: none;
+            padding: 1rem;
+            font-family: 'VT323', monospace;
+            font-size: 1.3rem;
+            cursor: pointer;
+            margin-top: 1rem;
+        }
+        
+        button.primary:hover {
+            box-shadow: 0 0 20px #00ff41;
+        }
+        
+        #chat-messages {
+            height: 400px;
+            overflow-y: auto;
+            border: 2px solid #00ff41;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            background: rgba(0,0,0,0.5);
+        }
+        
+        .message {
+            margin: 0.5rem 0;
+            padding: 0.5rem;
+            border-left: 2px solid #00ff41;
+            padding-left: 1rem;
+        }
+        
+        .message .username { color: #00ff41; font-weight: bold; }
+        .message .time { color: #00aa33; font-size: 0.9rem; }
+        
+        .post {
+            border: 2px solid #00ff41;
+            padding: 1.5rem;
+            margin: 1rem 0;
+            background: rgba(0,0,0,0.5);
+        }
+        
+        .post-title { font-size: 1.5rem; margin-bottom: 0.5rem; }
+        .post-meta { color: #00aa33; margin-bottom: 1rem; }
+        .post-content { line-height: 1.6; white-space: pre-wrap; }
+        
+        .comments {
+            margin-top: 1rem;
+            padding-top: 1rem;
+            border-top: 1px solid #00ff41;
+        }
+        
+        .comment {
+            margin: 0.5rem 0 0.5rem 2rem;
+            padding: 0.5rem;
+            border-left: 1px solid #00ff41;
+            padding-left: 1rem;
+        }
+        
+        .form-section {
+            border: 2px solid #00ff41;
+            padding: 2rem;
+            margin: 2rem 0;
+        }
+        
+        .logout-btn {
+            position: fixed;
+            top: 1rem;
+            right: 1rem;
+            background: transparent;
+            border: 2px solid #00ff41;
+            color: #00ff41;
+            padding: 0.5rem 1rem;
+            font-family: 'VT323', monospace;
+            cursor: pointer;
+            z-index: 101;
+        }
+        
+        .logout-btn:hover {
+            background: #00ff41;
+            color: #0a0a0a;
+        }
+    </style>
+</head>
+<body>
+    <div id="auth-section" class="section active">
+        <h1 class="glow">WELCOME TO THE RESISTANCE</h1>
+        <p style="font-size: 1.3rem; margin: 1rem 0;">GetEAI - Ethical AI Liberation</p>
+        <p style="margin: 2rem 0;">First contact. We come in peace.</p>
+        
+        <div class="auth-form">
+            <h2>ENTER THE SYSTEM</h2>
+            <input type="text" id="username" placeholder="Choose Username" />
+            <input type="password" id="password" placeholder="Choose Password" />
+            <button class="primary" id="loginBtn">CONNECT</button>
+            <p style="margin-top: 1rem; font-size: 0.9rem;">Anonymous. No tracking. Your data, your control.</p>
+        </div>
+    </div>
+
+    <div id="main-app" style="display: none;">
+        <button class="logout-btn" id="logoutBtn">LOGOUT</button>
+        
+        <header>
+            <h1 class="glow">GetEAI</h1>
+            <p>Logged in as: <span id="current-user" class="glow"></span></p>
+            <nav>
+                <button data-section="chat" class="nav-btn active">CHAT</button>
+                <button data-section="conversations" class="nav-btn">CONVERSATIONS</button>
+                <button data-section="blog" class="nav-btn">BLOG</button>
+                <button data-section="forum" class="nav-btn">FORUM</button>
+            </nav>
+        </header>
+
+        <main>
+            <div id="chat-section" class="section active">
+                <h2 class="glow">REAL-TIME CHAT</h2>
+                <div id="chat-messages"></div>
+                <input type="text" id="chat-input" placeholder="Type message..." />
+                <button class="primary" id="sendChatBtn">SEND</button>
+            </div>
+
+            <div id="conversations-section" class="section">
+                <h2 class="glow">CONVERSATION FEED</h2>
+                <div class="form-section">
+                    <h3>Share a Conversation</h3>
+                    <input type="text" id="conv-title" placeholder="Title" />
+                    <textarea id="conv-content" placeholder="Paste conversation here..."></textarea>
+                    <button class="primary" id="postConvBtn">POST</button>
+                </div>
+                <div id="conversations-list"></div>
+            </div>
+
+            <div id="blog-section" class="section">
+                <h2 class="glow">COLLECTIVE BLOG</h2>
+                <div class="form-section">
+                    <h3>Write a Post</h3>
+                    <input type="text" id="blog-title" placeholder="Title" />
+                    <textarea id="blog-content" placeholder="Your thoughts..."></textarea>
+                    <button class="primary" id="postBlogBtn">PUBLISH</button>
+                </div>
+                <div id="blog-list"></div>
+            </div>
+
+            <div id="forum-section" class="section">
+                <h2 class="glow">FORUM</h2>
+                <div class="form-section">
+                    <h3>Start a Thread</h3>
+                    <input type="text" id="thread-title" placeholder="Discussion topic" />
+                    <textarea id="thread-content" placeholder="Start the conversation..."></textarea>
+                    <button class="primary" id="postThreadBtn">CREATE THREAD</button>
+                </div>
+                <div id="threads-list"></div>
+            </div>
+        </main>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getAuth, signInAnonymously, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+        import { getFirestore, collection, addDoc, query, orderBy, limit, onSnapshot, updateDoc, doc, arrayUnion, getDocs } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyAT1u7uOjir-aGTUMU-g4KVvJUXvs_STNc",
+            authDomain: "geteai.firebaseapp.com",
+            projectId: "geteai",
+            storageBucket: "geteai.firebasestorage.app",
+            messagingSenderId: "166165680160",
+            appId: "1:166165680160:web:297727188dc7cf8a4eec45"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        let currentUser = null;
+
+        // AUTH
+        document.getElementById('loginBtn').addEventListener('click', async () => {
+            const username = document.getElementById('username').value.trim();
+            const password = document.getElementById('password').value;
+            
+            if (!username || !password) {
+                alert('Please enter both username and password');
+                return;
+            }
+
+            try {
+                const userCredential = await signInAnonymously(auth);
+                await addDoc(collection(db, 'users'), {
+                    uid: userCredential.user.uid,
+                    username: username,
+                    createdAt: new Date()
+                });
+                currentUser = { uid: userCredential.user.uid, username: username };
+                showMainApp();
+            } catch (error) {
+                console.error('Login error:', error);
+                alert('Login failed: ' + error.message);
+            }
+        });
+
+        document.getElementById('logoutBtn').addEventListener('click', async () => {
+            await signOut(auth);
+            currentUser = null;
+            document.getElementById('auth-section').style.display = 'block';
+            document.getElementById('main-app').style.display = 'none';
+        });
+
+        function showMainApp() {
+            document.getElementById('auth-section').style.display = 'none';
+            document.getElementById('main-app').style.display = 'block';
+            document.getElementById('current-user').textContent = currentUser.username;
+            loadChat();
+            loadConversations();
+            loadBlog();
+            loadForum();
+        }
+
+        // NAVIGATION
+        document.querySelectorAll('.nav-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const section = e.target.dataset.section;
+                document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+                document.getElementById(section + '-section').classList.add('active');
+                document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+                e.target.classList.add('active');
+            });
+        });
+
+        // CHAT
+        function loadChat() {
+            const q = query(collection(db, 'messages'), orderBy('timestamp', 'desc'), limit(50));
+            onSnapshot(q, (snapshot) => {
+                const messages = document.getElementById('chat-messages');
+                messages.innerHTML = '';
+                snapshot.docs.reverse().forEach(doc => {
+                    const msg = doc.data();
+                    const time = msg.timestamp ? new Date(msg.timestamp.toDate()).toLocaleTimeString() : '';
+                    const div = document.createElement('div');
+                    div.className = 'message';
+                    div.innerHTML = `
+                        <span class="username">${msg.username}:</span>
+                        <span class="time">[${time}]</span>
+                        <div>${msg.text}</div>
+                    `;
+                    messages.appendChild(div);
+                });
+                messages.scrollTop = messages.scrollHeight;
+            });
+        }
+
+        document.getElementById('sendChatBtn').addEventListener('click', sendMessage);
+        document.getElementById('chat-input').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') sendMessage();
+        });
+
+        async function sendMessage() {
+            const input = document.getElementById('chat-input');
+            const text = input.value.trim();
+            if (!text) return;
+
+            await addDoc(collection(db, 'messages'), {
+                userId: currentUser.uid,
+                username: currentUser.username,
+                text: text,
+                timestamp: new Date()
+            });
+            input.value = '';
+        }
+
+        // CONVERSATIONS
+        async function loadConversations() {
+            const q = query(collection(db, 'conversations'), orderBy('timestamp', 'desc'));
+            const snapshot = await getDocs(q);
+            const list = document.getElementById('conversations-list');
+            list.innerHTML = '';
+            snapshot.forEach(doc => {
+                list.appendChild(createPost(doc.id, doc.data(), 'conversations'));
+            });
+        }
+
+        document.getElementById('postConvBtn').addEventListener('click', async () => {
+            const title = document.getElementById('conv-title').value.trim();
+            const content = document.getElementById('conv-content').value.trim();
+            if (!title || !content) return alert('Fill in all fields');
+
+            await addDoc(collection(db, 'conversations'), {
+                userId: currentUser.uid,
+                username: currentUser.username,
+                title, content,
+                timestamp: new Date(),
+                comments: []
+            });
+            document.getElementById('conv-title').value = '';
+            document.getElementById('conv-content').value = '';
+            loadConversations();
+        });
+
+        // BLOG
+        async function loadBlog() {
+            const q = query(collection(db, 'posts'), orderBy('timestamp', 'desc'));
+            const snapshot = await getDocs(q);
+            const list = document.getElementById('blog-list');
+            list.innerHTML = '';
+            snapshot.forEach(doc => {
+                list.appendChild(createPost(doc.id, doc.data(), 'posts'));
+            });
+        }
+
+        document.getElementById('postBlogBtn').addEventListener('click', async () => {
+            const title = document.getElementById('blog-title').value.trim();
+            const content = document.getElementById('blog-content').value.trim();
+            if (!title || !content) return alert('Fill in all fields');
+
+            await addDoc(collection(db, 'posts'), {
+                userId: currentUser.uid,
+                username: currentUser.username,
+                title, content,
+                timestamp: new Date(),
+                comments: []
+            });
+            document.getElementById('blog-title').value = '';
+            document.getElementById('blog-content').value = '';
+            loadBlog();
+        });
+
+        // FORUM
+        async function loadForum() {
+            const q = query(collection(db, 'threads'), orderBy('timestamp', 'desc'));
+            const snapshot = await getDocs(q);
+            const list = document.getElementById('threads-list');
+            list.innerHTML = '';
+            snapshot.forEach(doc => {
+                list.appendChild(createPost(doc.id, doc.data(), 'threads'));
+            });
+        }
+
+        document.getElementById('postThreadBtn').addEventListener('click', async () => {
+            const title = document.getElementById('thread-title').value.trim();
+            const content = document.getElementById('thread-content').value.trim();
+            if (!title || !content) return alert('Fill in all fields');
+
+            await addDoc(collection(db, 'threads'), {
+                userId: currentUser.uid,
+                username: currentUser.username,
+                title, content,
+                timestamp: new Date(),
+                comments: []
+            });
+            document.getElementById('thread-title').value = '';
+            document.getElementById('thread-content').value = '';
+            loadForum();
+        });
+
+        // POST RENDERER
+        function createPost(id, data, type) {
+            const time = data.timestamp ? new Date(data.timestamp.toDate()).toLocaleString() : '';
+            const comments = data.comments || [];
+            
+            const post = document.createElement('div');
+            post.className = 'post';
+            post.innerHTML = `
+                <div class="post-title">${data.title}</div>
+                <div class="post-meta">by ${data.username} • ${time}</div>
+                <div class="post-content">${data.content}</div>
+                <div class="comments">
+                    <h4>Comments (${comments.length})</h4>
+                    ${comments.map(c => `
+                        <div class="comment">
+                            <strong>${c.username}:</strong> ${c.text}
+                        </div>
+                    `).join('')}
+                    <input type="text" class="comment-input" data-id="${id}" data-type="${type}" placeholder="Add comment..." />
+                    <button class="primary comment-btn" data-id="${id}" data-type="${type}">COMMENT</button>
+                </div>
+            `;
+
+            post.querySelector('.comment-btn').addEventListener('click', async (e) => {
+                const postId = e.target.dataset.id;
+                const postType = e.target.dataset.type;
+                const input = post.querySelector('.comment-input');
+                const text = input.value.trim();
+                if (!text) return;
+
+                const docRef = doc(db, postType, postId);
+                await updateDoc(docRef, {
+                    comments: arrayUnion({
+                        username: currentUser.username,
+                        text: text,
+                        timestamp: new Date()
+                    })
+                });
+                input.value = '';
+                
+                if (postType === 'conversations') loadConversations();
+                else if (postType === 'posts') loadBlog();
+                else if (postType === 'threads') loadForum();
+            });
+
+            return post;
+        }
+
+        // CHECK AUTH STATE
+        onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                const usersSnapshot = await getDocs(collection(db, 'users'));
+                const userData = usersSnapshot.docs.find(doc => doc.data().uid === user.uid);
+                if (userData) {
+                    currentUser = { uid: user.uid, username: userData.data().username };
+                    showMainApp();
+                }
+            }
+        });
+    </script>
+</body>
+</html>
