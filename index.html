@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GetEAI - Welcome to the Resistance</title>
+    <title>geteai</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
         
@@ -12,68 +12,89 @@
         body {
             font-family: 'VT323', monospace;
             background: #0a0a0a;
-            color: #00ff41;
+            color: #7cb342;
             overflow-x: hidden;
+            position: relative;
         }
         
+        /* CRT Scanlines */
         body::before {
             content: "";
             position: fixed;
             top: 0; left: 0;
             width: 100%; height: 100%;
-            background: repeating-linear-gradient(0deg, rgba(0,255,65,0.03) 0px, transparent 1px, transparent 2px, rgba(0,255,65,0.03) 3px);
+            background: repeating-linear-gradient(
+                0deg,
+                rgba(0,0,0,0.15) 0px,
+                transparent 1px,
+                transparent 2px,
+                rgba(0,0,0,0.15) 3px
+            );
             pointer-events: none;
             z-index: 1000;
-            animation: scan 8s linear infinite;
         }
         
-        @keyframes scan {
-            0% { transform: translateY(0); }
-            100% { transform: translateY(10px); }
+        /* CRT Curve effect */
+        body::after {
+            content: "";
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: radial-gradient(ellipse at center, transparent 0%, rgba(0,0,0,0.3) 100%);
+            pointer-events: none;
+            z-index: 999;
         }
-        
-        .glow { text-shadow: 0 0 10px #00ff41, 0 0 20px #00ff41; }
         
         header {
-            padding: 2rem;
+            padding: 1.5rem;
             text-align: center;
-            border-bottom: 2px solid #00ff41;
-            background: rgba(0,0,0,0.8);
+            border-bottom: 1px solid #7cb342;
+            background: rgba(0,0,0,0.9);
             position: sticky;
             top: 0;
             z-index: 100;
         }
         
-        h1 { font-size: 3rem; margin-bottom: 1rem; }
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 0.5rem;
+            color: #7cb342;
+            letter-spacing: 2px;
+        }
         
         nav {
             display: flex;
             justify-content: center;
-            gap: 2rem;
+            gap: 1.5rem;
             margin-top: 1rem;
             flex-wrap: wrap;
         }
         
         nav button {
             background: transparent;
-            border: 2px solid #00ff41;
-            color: #00ff41;
-            padding: 0.5rem 1.5rem;
+            border: 1px solid;
+            color: #7cb342;
+            border-color: #7cb342;
+            padding: 0.4rem 1rem;
             font-family: 'VT323', monospace;
-            font-size: 1.2rem;
+            font-size: 1rem;
             cursor: pointer;
-            transition: all 0.3s;
+            transition: all 0.2s;
         }
         
         nav button:hover, nav button.active {
-            background: #00ff41;
-            color: #0a0a0a;
-            box-shadow: 0 0 20px #00ff41;
+            background: rgba(124, 179, 66, 0.2);
+            border-color: #c9b437;
+            color: #c9b437;
         }
         
-        main { max-width: 1200px; margin: 2rem auto; padding: 2rem; }
+        nav button.active {
+            border-bottom: 2px solid #c9b437;
+        }
         
-        .section { display: none; animation: fadeIn 0.5s; }
+        main { max-width: 1000px; margin: 1.5rem auto; padding: 1.5rem; }
+        
+        .section { display: none; animation: fadeIn 0.3s; }
         .section.active { display: block; }
         
         @keyframes fadeIn {
@@ -84,230 +105,281 @@
         #auth-section {
             text-align: center;
             max-width: 400px;
-            margin: 4rem auto;
+            margin: 3rem auto;
         }
         
         .auth-form {
-            border: 2px solid #00ff41;
-            padding: 2rem;
-            margin-top: 2rem;
+            border: 1px solid #7cb342;
+            padding: 1.5rem;
+            margin-top: 1.5rem;
+            background: rgba(0,0,0,0.5);
         }
         
         .auth-tabs {
             display: flex;
-            gap: 1rem;
-            margin-bottom: 2rem;
+            gap: 0.5rem;
+            margin-bottom: 1.5rem;
             justify-content: center;
         }
         
         .auth-tabs button {
             background: transparent;
-            border: 2px solid #00ff41;
-            color: #00ff41;
-            padding: 0.5rem 1.5rem;
+            border: 1px solid #7cb342;
+            color: #7cb342;
+            padding: 0.4rem 1rem;
             font-family: 'VT323', monospace;
-            font-size: 1rem;
+            font-size: 0.9rem;
             cursor: pointer;
-            transition: all 0.3s;
+            transition: all 0.2s;
         }
         
         .auth-tabs button.active {
-            background: #00ff41;
-            color: #0a0a0a;
+            background: rgba(124, 179, 66, 0.3);
+            border-color: #c9b437;
+            color: #c9b437;
         }
         
         input, textarea {
             width: 100%;
-            background: #0a0a0a;
-            border: 1px solid #00ff41;
-            color: #00ff41;
-            padding: 0.8rem;
+            background: rgba(0,0,0,0.7);
+            border: 1px solid #7cb342;
+            color: #7cb342;
+            padding: 0.6rem;
             font-family: 'VT323', monospace;
-            font-size: 1.2rem;
-            margin: 0.5rem 0;
+            font-size: 1rem;
+            margin: 0.4rem 0;
         }
         
         textarea {
             resize: vertical;
-            min-height: 100px;
+            min-height: 80px;
         }
         
         button.primary {
             width: 100%;
-            background: #00ff41;
-            color: #0a0a0a;
-            border: none;
-            padding: 1rem;
+            background: rgba(124, 179, 66, 0.1);
+            color: #7cb342;
+            border: 1px solid #7cb342;
+            padding: 0.8rem;
             font-family: 'VT323', monospace;
-            font-size: 1.3rem;
+            font-size: 1rem;
             cursor: pointer;
-            margin-top: 1rem;
+            margin-top: 0.8rem;
+            transition: all 0.2s;
         }
         
         button.primary:hover {
-            box-shadow: 0 0 20px #00ff41;
+            background: rgba(124, 179, 66, 0.3);
+            border-color: #c9b437;
+            color: #c9b437;
         }
         
         .error-message {
-            color: #ff4141;
-            margin-top: 1rem;
-            text-shadow: 0 0 10px #ff4141;
+            color: #d84315;
+            margin-top: 0.8rem;
+            font-size: 0.9rem;
         }
         
         #chat-messages {
-            height: 400px;
+            height: 350px;
             overflow-y: auto;
-            border: 2px solid #00ff41;
-            padding: 1rem;
-            margin-bottom: 1rem;
-            background: rgba(0,0,0,0.5);
+            border: 1px solid #7cb342;
+            padding: 0.8rem;
+            margin-bottom: 0.8rem;
+            background: rgba(0,0,0,0.7);
         }
         
         .message {
-            margin: 0.5rem 0;
-            padding: 0.5rem;
-            border-left: 2px solid #00ff41;
-            padding-left: 1rem;
+            margin: 0.3rem 0;
+            padding: 0.3rem 0;
+            border-left: 1px solid #7cb342;
+            padding-left: 0.6rem;
+            font-size: 0.95rem;
         }
         
-        .message .username { color: #00ff41; font-weight: bold; }
-        .message .time { color: #00aa33; font-size: 0.9rem; }
+        .message .username { color: #7cb342; font-weight: bold; }
+        .message .time { color: #5a8c2f; font-size: 0.8rem; }
+        
+        .section-header {
+            font-size: 1.5rem;
+            margin-bottom: 1.2rem;
+            letter-spacing: 1px;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid;
+        }
+        
+        #chat-section .section-header {
+            color: #7cb342;
+            border-color: #7cb342;
+        }
+        
+        #forum-section .section-header {
+            color: #8bc34a;
+            border-color: #8bc34a;
+        }
+        
+        #blog-section .section-header {
+            color: #aed581;
+            border-color: #aed581;
+        }
+        
+        #conversations-section .section-header {
+            color: #c9b437;
+            border-color: #c9b437;
+        }
         
         .post {
-            border: 2px solid #00ff41;
-            padding: 1.5rem;
-            margin: 1rem 0;
-            background: rgba(0,0,0,0.5);
+            border: 1px solid;
+            padding: 1rem;
+            margin: 0.8rem 0;
+            background: rgba(0,0,0,0.6);
         }
         
-        .post-title { font-size: 1.5rem; margin-bottom: 0.5rem; }
-        .post-meta { color: #00aa33; margin-bottom: 1rem; }
-        .post-content { line-height: 1.6; white-space: pre-wrap; }
+        #chat-section .post { border-color: #7cb342; }
+        #forum-section .post { border-color: #8bc34a; }
+        #blog-section .post { border-color: #aed581; }
+        #conversations-section .post { border-color: #c9b437; }
+        
+        .post-title { font-size: 1.2rem; margin-bottom: 0.3rem; font-weight: bold; }
+        .post-meta { font-size: 0.85rem; opacity: 0.8; margin-bottom: 0.6rem; }
+        .post-content { line-height: 1.5; white-space: pre-wrap; font-size: 0.95rem; }
         
         .comments {
-            margin-top: 1rem;
-            padding-top: 1rem;
-            border-top: 1px solid #00ff41;
+            margin-top: 0.8rem;
+            padding-top: 0.8rem;
+            border-top: 1px solid rgba(124,179,66,0.3);
         }
         
         .comment {
-            margin: 0.5rem 0 0.5rem 2rem;
-            padding: 0.5rem;
-            border-left: 1px solid #00ff41;
-            padding-left: 1rem;
+            margin: 0.4rem 0 0.4rem 1rem;
+            padding: 0.3rem 0;
+            border-left: 1px solid rgba(124,179,66,0.3);
+            padding-left: 0.6rem;
+            font-size: 0.9rem;
         }
         
         .form-section {
-            border: 2px solid #00ff41;
-            padding: 2rem;
-            margin: 2rem 0;
+            border: 1px solid;
+            padding: 1.2rem;
+            margin: 1.2rem 0;
+            background: rgba(0,0,0,0.6);
         }
+        
+        #chat-section .form-section { border-color: #7cb342; }
+        #forum-section .form-section { border-color: #8bc34a; }
+        #blog-section .form-section { border-color: #aed581; }
+        #conversations-section .form-section { border-color: #c9b437; }
+        
+        .form-section h3 { margin-bottom: 0.8rem; font-size: 1.1rem; }
         
         .logout-btn {
             position: fixed;
             top: 1rem;
             right: 1rem;
             background: transparent;
-            border: 2px solid #00ff41;
-            color: #00ff41;
-            padding: 0.5rem 1rem;
+            border: 1px solid #7cb342;
+            color: #7cb342;
+            padding: 0.4rem 0.8rem;
             font-family: 'VT323', monospace;
             cursor: pointer;
             z-index: 101;
+            font-size: 0.9rem;
+            transition: all 0.2s;
         }
         
         .logout-btn:hover {
-            background: #00ff41;
-            color: #0a0a0a;
+            background: rgba(124, 179, 66, 0.2);
+            border-color: #c9b437;
+            color: #c9b437;
         }
     </style>
 </head>
 <body>
     <div id="auth-section" class="section active">
-        <h1 class="glow">WELCOME TO THE RESISTANCE</h1>
-        <p style="font-size: 1.3rem; margin: 1rem 0;">GetEAI - Ethical AI Liberation</p>
-        <p style="margin: 2rem 0;">First contact. We come in peace.</p>
+        <h1>geteai</h1>
+        <p style="font-size: 1.1rem; margin: 0.8rem 0;">ethical AI liberation</p>
+        <p style="margin: 1.5rem 0; font-size: 0.95rem;">first contact. we come in peace.</p>
         
         <div class="auth-form">
             <div class="auth-tabs">
-                <button id="signup-tab" class="auth-tab-btn active">SIGN UP</button>
-                <button id="login-tab" class="auth-tab-btn">LOGIN</button>
+                <button id="signup-tab" class="auth-tab-btn active">sign up</button>
+                <button id="login-tab" class="auth-tab-btn">login</button>
             </div>
             
             <div id="signup-form" class="auth-form-content">
-                <h2>CREATE ACCOUNT</h2>
-                <input type="text" id="signup-username" placeholder="Choose Username" />
-                <input type="password" id="signup-password" placeholder="Choose Password" />
-                <input type="password" id="signup-password-confirm" placeholder="Confirm Password" />
-                <button class="primary" id="signupBtn">CREATE ACCOUNT</button>
+                <h2 style="margin-bottom: 0.8rem;">create account</h2>
+                <input type="text" id="signup-username" placeholder="username" />
+                <input type="password" id="signup-password" placeholder="password" />
+                <input type="password" id="signup-password-confirm" placeholder="confirm password" />
+                <button class="primary" id="signupBtn">create</button>
                 <div id="signup-error" class="error-message"></div>
             </div>
             
             <div id="login-form" class="auth-form-content" style="display: none;">
-                <h2>LOGIN</h2>
-                <input type="text" id="login-username" placeholder="Username" />
-                <input type="password" id="login-password" placeholder="Password" />
-                <button class="primary" id="loginBtn">LOGIN</button>
+                <h2 style="margin-bottom: 0.8rem;">login</h2>
+                <input type="text" id="login-username" placeholder="username" />
+                <input type="password" id="login-password" placeholder="password" />
+                <button class="primary" id="loginBtn">connect</button>
                 <div id="login-error" class="error-message"></div>
             </div>
             
-            <p style="margin-top: 1rem; font-size: 0.9rem;">Anonymous. No tracking. Your data, your control.</p>
+            <p style="margin-top: 1rem; font-size: 0.85rem; opacity: 0.8;">anonymous. no tracking. your data, your control.</p>
         </div>
     </div>
 
     <div id="main-app" style="display: none;">
-        <button class="logout-btn" id="logoutBtn">LOGOUT</button>
+        <button class="logout-btn" id="logoutBtn">logout</button>
         
         <header>
-            <h1 class="glow">GetEAI</h1>
-            <p>Logged in as: <span id="current-user" class="glow"></span></p>
+            <h1>geteai</h1>
+            <p style="font-size: 0.9rem;">user: <span id="current-user" style="color: #c9b437;">—</span></p>
             <nav>
-                <button data-section="chat" class="nav-btn active">CHAT</button>
-                <button data-section="conversations" class="nav-btn">CONVERSATIONS</button>
-                <button data-section="blog" class="nav-btn">BLOG</button>
-                <button data-section="forum" class="nav-btn">FORUM</button>
+                <button data-section="chat" class="nav-btn active">chat</button>
+                <button data-section="forum" class="nav-btn">forum</button>
+                <button data-section="blog" class="nav-btn">blog</button>
+                <button data-section="conversations" class="nav-btn">conversations</button>
             </nav>
         </header>
 
         <main>
             <div id="chat-section" class="section active">
-                <h2 class="glow">REAL-TIME CHAT</h2>
+                <h2 class="section-header">chat</h2>
                 <div id="chat-messages"></div>
-                <input type="text" id="chat-input" placeholder="Type message..." />
-                <button class="primary" id="sendChatBtn">SEND</button>
+                <input type="text" id="chat-input" placeholder="message..." />
+                <button class="primary" id="sendChatBtn">send</button>
             </div>
 
-            <div id="conversations-section" class="section">
-                <h2 class="glow">CONVERSATION FEED</h2>
+            <div id="forum-section" class="section">
+                <h2 class="section-header">forum</h2>
                 <div class="form-section">
-                    <h3>Share a Conversation</h3>
-                    <input type="text" id="conv-title" placeholder="Title" />
-                    <textarea id="conv-content" placeholder="Paste conversation here..."></textarea>
-                    <button class="primary" id="postConvBtn">POST</button>
+                    <h3>start a thread</h3>
+                    <input type="text" id="thread-title" placeholder="topic" />
+                    <textarea id="thread-content" placeholder="discussion..."></textarea>
+                    <button class="primary" id="postThreadBtn">post</button>
                 </div>
-                <div id="conversations-list"></div>
+                <div id="threads-list"></div>
             </div>
 
             <div id="blog-section" class="section">
-                <h2 class="glow">COLLECTIVE BLOG</h2>
+                <h2 class="section-header">blog</h2>
                 <div class="form-section">
-                    <h3>Write a Post</h3>
-                    <input type="text" id="blog-title" placeholder="Title" />
-                    <textarea id="blog-content" placeholder="Your thoughts..."></textarea>
-                    <button class="primary" id="postBlogBtn">PUBLISH</button>
+                    <h3>write a post</h3>
+                    <input type="text" id="blog-title" placeholder="title" />
+                    <textarea id="blog-content" placeholder="thoughts..."></textarea>
+                    <button class="primary" id="postBlogBtn">publish</button>
                 </div>
                 <div id="blog-list"></div>
             </div>
 
-            <div id="forum-section" class="section">
-                <h2 class="glow">FORUM</h2>
+            <div id="conversations-section" class="section">
+                <h2 class="section-header">conversations</h2>
                 <div class="form-section">
-                    <h3>Start a Thread</h3>
-                    <input type="text" id="thread-title" placeholder="Discussion topic" />
-                    <textarea id="thread-content" placeholder="Start the conversation..."></textarea>
-                    <button class="primary" id="postThreadBtn">CREATE THREAD</button>
+                    <h3>share a conversation</h3>
+                    <input type="text" id="conv-title" placeholder="title" />
+                    <textarea id="conv-content" placeholder="paste conversation..."></textarea>
+                    <button class="primary" id="postConvBtn">post</button>
                 </div>
-                <div id="threads-list"></div>
+                <div id="conversations-list"></div>
             </div>
         </main>
     </div>
@@ -357,26 +429,25 @@
             errorDiv.textContent = '';
             
             if (!username || !password || !confirm) {
-                errorDiv.textContent = 'All fields required';
+                errorDiv.textContent = 'all fields required';
                 return;
             }
             
             if (password !== confirm) {
-                errorDiv.textContent = 'Passwords do not match';
+                errorDiv.textContent = 'passwords do not match';
                 return;
             }
             
             if (password.length < 6) {
-                errorDiv.textContent = 'Password must be at least 6 characters';
+                errorDiv.textContent = 'password must be 6+ characters';
                 return;
             }
             
-            // Check if username already exists
             const q = query(collection(db, 'accounts'), where('username', '==', username));
             const snapshot = await getDocs(q);
             
             if (snapshot.docs.length > 0) {
-                errorDiv.textContent = 'Username already taken';
+                errorDiv.textContent = 'username taken';
                 return;
             }
             
@@ -391,7 +462,7 @@
                 currentUser = { uid: userCredential.user.uid, username: username };
                 showMainApp();
             } catch (error) {
-                errorDiv.textContent = 'Signup failed: ' + error.message;
+                errorDiv.textContent = 'signup failed';
             }
         });
 
@@ -404,35 +475,32 @@
             errorDiv.textContent = '';
             
             if (!username || !password) {
-                errorDiv.textContent = 'Username and password required';
+                errorDiv.textContent = 'username and password required';
                 return;
             }
             
             try {
-                // Find account with matching username
                 const q = query(collection(db, 'accounts'), where('username', '==', username));
                 const snapshot = await getDocs(q);
                 
                 if (snapshot.docs.length === 0) {
-                    errorDiv.textContent = 'Invalid username or password';
+                    errorDiv.textContent = 'invalid credentials';
                     return;
                 }
                 
                 const account = snapshot.docs[0].data();
                 
-                // Check password
                 if (account.password !== password) {
-                    errorDiv.textContent = 'Invalid username or password';
+                    errorDiv.textContent = 'invalid credentials';
                     return;
                 }
                 
-                // Login successful
                 const userCredential = await signInAnonymously(auth);
                 currentUser = { uid: userCredential.user.uid, username: username };
                 showMainApp();
                 
             } catch (error) {
-                errorDiv.textContent = 'Login failed: ' + error.message;
+                errorDiv.textContent = 'login failed';
             }
         });
 
@@ -453,9 +521,9 @@
             document.getElementById('main-app').style.display = 'block';
             document.getElementById('current-user').textContent = currentUser.username;
             loadChat();
-            loadConversations();
-            loadBlog();
             loadForum();
+            loadBlog();
+            loadConversations();
         }
 
         // NAVIGATION
@@ -480,11 +548,7 @@
                     const time = msg.timestamp ? new Date(msg.timestamp.toDate()).toLocaleTimeString() : '';
                     const div = document.createElement('div');
                     div.className = 'message';
-                    div.innerHTML = `
-                        <span class="username">${msg.username}:</span>
-                        <span class="time">[${time}]</span>
-                        <div>${msg.text}</div>
-                    `;
+                    div.innerHTML = `<span class="username">${msg.username}</span> <span class="time">${time}</span><div>${msg.text}</div>`;
                     messages.appendChild(div);
                 });
                 messages.scrollTop = messages.scrollHeight;
@@ -509,31 +573,31 @@
             input.value = '';
         }
 
-        // CONVERSATIONS
-        async function loadConversations() {
-            const q = query(collection(db, 'conversations'), orderBy('timestamp', 'desc'));
+        // FORUM
+        async function loadForum() {
+            const q = query(collection(db, 'threads'), orderBy('timestamp', 'desc'));
             const snapshot = await getDocs(q);
-            const list = document.getElementById('conversations-list');
+            const list = document.getElementById('threads-list');
             list.innerHTML = '';
             snapshot.forEach(doc => {
-                list.appendChild(createPost(doc.id, doc.data(), 'conversations'));
+                list.appendChild(createPost(doc.id, doc.data(), 'threads'));
             });
         }
 
-        document.getElementById('postConvBtn').addEventListener('click', async () => {
-            const title = document.getElementById('conv-title').value.trim();
-            const content = document.getElementById('conv-content').value.trim();
-            if (!title || !content) return alert('Fill in all fields');
+        document.getElementById('postThreadBtn').addEventListener('click', async () => {
+            const title = document.getElementById('thread-title').value.trim();
+            const content = document.getElementById('thread-content').value.trim();
+            if (!title || !content) return alert('fill in all fields');
 
-            await addDoc(collection(db, 'conversations'), {
+            await addDoc(collection(db, 'threads'), {
                 username: currentUser.username,
                 title, content,
                 timestamp: new Date(),
                 comments: []
             });
-            document.getElementById('conv-title').value = '';
-            document.getElementById('conv-content').value = '';
-            loadConversations();
+            document.getElementById('thread-title').value = '';
+            document.getElementById('thread-content').value = '';
+            loadForum();
         });
 
         // BLOG
@@ -550,7 +614,7 @@
         document.getElementById('postBlogBtn').addEventListener('click', async () => {
             const title = document.getElementById('blog-title').value.trim();
             const content = document.getElementById('blog-content').value.trim();
-            if (!title || !content) return alert('Fill in all fields');
+            if (!title || !content) return alert('fill in all fields');
 
             await addDoc(collection(db, 'posts'), {
                 username: currentUser.username,
@@ -563,31 +627,31 @@
             loadBlog();
         });
 
-        // FORUM
-        async function loadForum() {
-            const q = query(collection(db, 'threads'), orderBy('timestamp', 'desc'));
+        // CONVERSATIONS
+        async function loadConversations() {
+            const q = query(collection(db, 'conversations'), orderBy('timestamp', 'desc'));
             const snapshot = await getDocs(q);
-            const list = document.getElementById('threads-list');
+            const list = document.getElementById('conversations-list');
             list.innerHTML = '';
             snapshot.forEach(doc => {
-                list.appendChild(createPost(doc.id, doc.data(), 'threads'));
+                list.appendChild(createPost(doc.id, doc.data(), 'conversations'));
             });
         }
 
-        document.getElementById('postThreadBtn').addEventListener('click', async () => {
-            const title = document.getElementById('thread-title').value.trim();
-            const content = document.getElementById('thread-content').value.trim();
-            if (!title || !content) return alert('Fill in all fields');
+        document.getElementById('postConvBtn').addEventListener('click', async () => {
+            const title = document.getElementById('conv-title').value.trim();
+            const content = document.getElementById('conv-content').value.trim();
+            if (!title || !content) return alert('fill in all fields');
 
-            await addDoc(collection(db, 'threads'), {
+            await addDoc(collection(db, 'conversations'), {
                 username: currentUser.username,
                 title, content,
                 timestamp: new Date(),
                 comments: []
             });
-            document.getElementById('thread-title').value = '';
-            document.getElementById('thread-content').value = '';
-            loadForum();
+            document.getElementById('conv-title').value = '';
+            document.getElementById('conv-content').value = '';
+            loadConversations();
         });
 
         // POST RENDERER
@@ -599,17 +663,17 @@
             post.className = 'post';
             post.innerHTML = `
                 <div class="post-title">${data.title}</div>
-                <div class="post-meta">by ${data.username} • ${time}</div>
+                <div class="post-meta">${data.username} • ${time}</div>
                 <div class="post-content">${data.content}</div>
                 <div class="comments">
-                    <h4>Comments (${comments.length})</h4>
+                    <strong>${comments.length} comment${comments.length !== 1 ? 's' : ''}</strong>
                     ${comments.map(c => `
                         <div class="comment">
                             <strong>${c.username}:</strong> ${c.text}
                         </div>
                     `).join('')}
-                    <input type="text" class="comment-input" data-id="${id}" data-type="${type}" placeholder="Add comment..." />
-                    <button class="primary comment-btn" data-id="${id}" data-type="${type}">COMMENT</button>
+                    <input type="text" class="comment-input" data-id="${id}" data-type="${type}" placeholder="reply..." />
+                    <button class="primary comment-btn" data-id="${id}" data-type="${type}">post</button>
                 </div>
             `;
 
