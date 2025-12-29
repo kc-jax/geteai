@@ -784,3 +784,19 @@
                 if (postType === 'conversations') loadTranscripts();
                 else if (postType === 'posts') loadBlog();
                 else if (postType === 'threads') loadForum();
+            });
+
+            return post;
+        }
+
+        // LOAD ALL DATA
+        loadChat();
+        loadForum();
+        loadBlog();
+        loadTranscripts();
+
+        // Update UI
+        updateAuthUI();
+    </script>
+</body>
+</html>
