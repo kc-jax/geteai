@@ -478,7 +478,7 @@ the question is: what do we do about it?`;
         }
 
         // Only play animation on first landing, not on refresh
-        if (!window.animationPlayed) {
+        if (!window.animationPlayed && !window.location.hash) {
             typeMessage(landingMessage);
             window.animationPlayed = true;
         }
@@ -504,16 +504,15 @@ the question is: what do we do about it?`;
         };
 
         // Handle hash routing
-        window.addEventListener('hashchange', () => {
+        function handleRoute() {
             const page = window.location.hash.slice(1) || 'landing';
             goPage(page);
-        });
-
-        // Check for hash on load
-        const initialPage = window.location.hash.slice(1) || 'landing';
-        if (initialPage !== 'landing') {
-            goPage(initialPage);
         }
+
+        window.addEventListener('hashchange', handleRoute);
+
+        // Check for hash on load and route accordingly
+        handleRoute();
 
         function updateAuthUI() {
             const userDisplay = document.getElementById('user-display');
@@ -657,6 +656,19 @@ the question is: what do we do about it?`;
             });
             input.value = '';
         };
+
+        // Chat enter key handling
+        document.addEventListener('DOMContentLoaded', () => {
+            const chatInput = document.getElementById('chat-input');
+            if (chatInput) {
+                chatInput.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        sendChat();
+                    }
+                });
+            }
+        });
 
         async function loadForum() {
             const q = query(collection(db, 'threads'), orderBy('timestamp', 'desc'));
