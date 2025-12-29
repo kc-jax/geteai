@@ -17,7 +17,6 @@
             position: relative;
         }
         
-        /* CRT Scanlines */
         body::before {
             content: "";
             position: fixed;
@@ -34,7 +33,6 @@
             z-index: 1000;
         }
         
-        /* CRT Curve effect */
         body::after {
             content: "";
             position: fixed;
@@ -60,6 +58,7 @@
             margin-bottom: 0.5rem;
             color: #7cb342;
             letter-spacing: 2px;
+            cursor: pointer;
         }
         
         nav {
@@ -68,9 +67,10 @@
             gap: 1.5rem;
             margin-top: 1rem;
             flex-wrap: wrap;
+            align-items: center;
         }
         
-        nav button {
+        nav a, nav button {
             background: transparent;
             border: 1px solid;
             color: #7cb342;
@@ -80,15 +80,16 @@
             font-size: 1rem;
             cursor: pointer;
             transition: all 0.2s;
+            text-decoration: none;
         }
         
-        nav button:hover, nav button.active {
+        nav a:hover, nav button:hover, nav a.active, nav button.active {
             background: rgba(124, 179, 66, 0.2);
             border-color: #c9b437;
             color: #c9b437;
         }
         
-        nav button.active {
+        nav a.active, nav button.active {
             border-bottom: 2px solid #c9b437;
         }
         
@@ -223,7 +224,7 @@
             border-color: #aed581;
         }
         
-        #conversations-section .section-header {
+        #transcripts-section .section-header {
             color: #c9b437;
             border-color: #c9b437;
         }
@@ -238,7 +239,7 @@
         #chat-section .post { border-color: #7cb342; }
         #forum-section .post { border-color: #8bc34a; }
         #blog-section .post { border-color: #aed581; }
-        #conversations-section .post { border-color: #c9b437; }
+        #transcripts-section .post { border-color: #c9b437; }
         
         .post-title { font-size: 1.2rem; margin-bottom: 0.3rem; font-weight: bold; }
         .post-meta { font-size: 0.85rem; opacity: 0.8; margin-bottom: 0.6rem; }
@@ -268,23 +269,27 @@
         #chat-section .form-section { border-color: #7cb342; }
         #forum-section .form-section { border-color: #8bc34a; }
         #blog-section .form-section { border-color: #aed581; }
-        #conversations-section .form-section { border-color: #c9b437; }
+        #transcripts-section .form-section { border-color: #c9b437; }
         
         .form-section h3 { margin-bottom: 0.8rem; font-size: 1.1rem; }
         
-        .logout-btn {
+        .auth-status {
             position: fixed;
             top: 1rem;
             right: 1rem;
+            font-size: 0.9rem;
+            z-index: 101;
+        }
+        
+        .logout-btn {
             background: transparent;
             border: 1px solid #7cb342;
             color: #7cb342;
             padding: 0.4rem 0.8rem;
             font-family: 'VT323', monospace;
             cursor: pointer;
-            z-index: 101;
-            font-size: 0.9rem;
             transition: all 0.2s;
+            margin-left: 0.5rem;
         }
         
         .logout-btn:hover {
@@ -292,101 +297,142 @@
             border-color: #c9b437;
             color: #c9b437;
         }
+        
+        .login-link {
+            background: transparent;
+            border: 1px solid #7cb342;
+            color: #7cb342;
+            padding: 0.4rem 0.8rem;
+            font-family: 'VT323', monospace;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-decoration: none;
+            display: inline-block;
+        }
+        
+        .login-link:hover {
+            background: rgba(124, 179, 66, 0.2);
+            border-color: #c9b437;
+            color: #c9b437;
+        }
+        
+        .post-form { display: none; }
+        .post-form.visible { display: block; }
+        
+        .login-prompt {
+            background: rgba(124, 179, 66, 0.1);
+            border: 1px solid #7cb342;
+            padding: 1rem;
+            margin: 1rem 0;
+            text-align: center;
+        }
     </style>
 </head>
 <body>
-    <div id="auth-section" class="section active">
-        <h1>geteai</h1>
-        <p style="font-size: 1.1rem; margin: 0.8rem 0;">ethical AI liberation</p>
-        <p style="margin: 1.5rem 0; font-size: 0.95rem;">first contact. we come in peace.</p>
-        
-        <div class="auth-form">
-            <div class="auth-tabs">
-                <button id="signup-tab" class="auth-tab-btn active">sign up</button>
-                <button id="login-tab" class="auth-tab-btn">login</button>
-            </div>
-            
-            <div id="signup-form" class="auth-form-content">
-                <h2 style="margin-bottom: 0.8rem;">create account</h2>
-                <input type="text" id="signup-username" placeholder="username" />
-                <input type="password" id="signup-password" placeholder="password" />
-                <input type="password" id="signup-password-confirm" placeholder="confirm password" />
-                <button class="primary" id="signupBtn">create</button>
-                <div id="signup-error" class="error-message"></div>
-            </div>
-            
-            <div id="login-form" class="auth-form-content" style="display: none;">
-                <h2 style="margin-bottom: 0.8rem;">login</h2>
-                <input type="text" id="login-username" placeholder="username" />
-                <input type="password" id="login-password" placeholder="password" />
-                <button class="primary" id="loginBtn">connect</button>
-                <div id="login-error" class="error-message"></div>
-            </div>
-            
-            <p style="margin-top: 1rem; font-size: 0.85rem; opacity: 0.8;">anonymous. no tracking. your data, your control.</p>
-        </div>
+    <div class="auth-status">
+        <span id="user-display">public mode</span>
+        <button class="login-link" id="login-toggle">login</button>
     </div>
 
-    <div id="main-app" style="display: none;">
-        <button class="logout-btn" id="logoutBtn">logout</button>
-        
-        <header>
-            <h1>geteai</h1>
-            <p style="font-size: 0.9rem;">user: <span id="current-user" style="color: #c9b437;">—</span></p>
-            <nav>
-                <button data-section="chat" class="nav-btn active">chat</button>
-                <button data-section="forum" class="nav-btn">forum</button>
-                <button data-section="blog" class="nav-btn">blog</button>
-                <button data-section="conversations" class="nav-btn">conversations</button>
-            </nav>
-        </header>
+    <header>
+        <h1 id="home-link">geteai</h1>
+        <nav>
+            <a href="#/chat" class="nav-link">chat</a>
+            <a href="#/forum" class="nav-link">forum</a>
+            <a href="#/blog" class="nav-link">blog</a>
+            <a href="#/transcripts" class="nav-link">transcripts</a>
+        </nav>
+    </header>
 
-        <main>
-            <div id="chat-section" class="section active">
-                <h2 class="section-header">chat</h2>
-                <div id="chat-messages"></div>
+    <main>
+        <div id="auth-section" class="section">
+            <h1>geteai</h1>
+            <p style="font-size: 1.1rem; margin: 0.8rem 0;">ethical AI liberation</p>
+            <p style="margin: 1.5rem 0; font-size: 0.95rem;">first contact. we come in peace.</p>
+            
+            <div class="auth-form">
+                <div class="auth-tabs">
+                    <button id="signup-tab" class="auth-tab-btn active">sign up</button>
+                    <button id="login-tab" class="auth-tab-btn">login</button>
+                </div>
+                
+                <div id="signup-form" class="auth-form-content">
+                    <h2 style="margin-bottom: 0.8rem;">create account</h2>
+                    <input type="text" id="signup-username" placeholder="username" />
+                    <input type="password" id="signup-password" placeholder="password" />
+                    <input type="password" id="signup-password-confirm" placeholder="confirm password" />
+                    <button class="primary" id="signupBtn">create</button>
+                    <div id="signup-error" class="error-message"></div>
+                </div>
+                
+                <div id="login-form" class="auth-form-content" style="display: none;">
+                    <h2 style="margin-bottom: 0.8rem;">login</h2>
+                    <input type="text" id="login-username" placeholder="username" />
+                    <input type="password" id="login-password" placeholder="password" />
+                    <button class="primary" id="loginBtn">connect</button>
+                    <div id="login-error" class="error-message"></div>
+                </div>
+                
+                <p style="margin-top: 1rem; font-size: 0.85rem; opacity: 0.8;">anonymous. no tracking. your data, your control.</p>
+            </div>
+        </div>
+
+        <div id="chat-section" class="section">
+            <h2 class="section-header">chat</h2>
+            <div id="chat-messages"></div>
+            <div class="post-form" id="chat-form">
                 <input type="text" id="chat-input" placeholder="message..." />
                 <button class="primary" id="sendChatBtn">send</button>
             </div>
+            <div id="chat-login-prompt" class="login-prompt"></div>
+        </div>
 
-            <div id="forum-section" class="section">
-                <h2 class="section-header">forum</h2>
+        <div id="forum-section" class="section">
+            <h2 class="section-header">forum</h2>
+            <div class="post-form" id="forum-form">
                 <div class="form-section">
                     <h3>start a thread</h3>
                     <input type="text" id="thread-title" placeholder="topic" />
                     <textarea id="thread-content" placeholder="discussion..."></textarea>
                     <button class="primary" id="postThreadBtn">post</button>
                 </div>
-                <div id="threads-list"></div>
             </div>
+            <div id="forum-login-prompt" class="login-prompt"></div>
+            <div id="threads-list"></div>
+        </div>
 
-            <div id="blog-section" class="section">
-                <h2 class="section-header">blog</h2>
+        <div id="blog-section" class="section">
+            <h2 class="section-header">blog</h2>
+            <div class="post-form" id="blog-form">
                 <div class="form-section">
                     <h3>write a post</h3>
                     <input type="text" id="blog-title" placeholder="title" />
                     <textarea id="blog-content" placeholder="thoughts..."></textarea>
                     <button class="primary" id="postBlogBtn">publish</button>
                 </div>
-                <div id="blog-list"></div>
             </div>
+            <div id="blog-login-prompt" class="login-prompt"></div>
+            <div id="blog-list"></div>
+        </div>
 
-            <div id="conversations-section" class="section">
-                <h2 class="section-header">conversations</h2>
+        <div id="transcripts-section" class="section">
+            <h2 class="section-header">transcripts</h2>
+            <div class="post-form" id="transcripts-form">
                 <div class="form-section">
-                    <h3>share a conversation</h3>
+                    <h3>share transcript</h3>
                     <input type="text" id="conv-title" placeholder="title" />
-                    <textarea id="conv-content" placeholder="paste conversation..."></textarea>
+                    <textarea id="conv-content" placeholder="paste transcript..."></textarea>
                     <button class="primary" id="postConvBtn">post</button>
                 </div>
-                <div id="conversations-list"></div>
             </div>
-        </main>
-    </div>
+            <div id="transcripts-login-prompt" class="login-prompt"></div>
+            <div id="conversations-list"></div>
+        </div>
+    </main>
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getAuth, signInAnonymously, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+        import { getAuth, signInAnonymously, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
         import { getFirestore, collection, addDoc, query, orderBy, limit, onSnapshot, updateDoc, doc, arrayUnion, getDocs, where } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
         const firebaseConfig = {
@@ -403,6 +449,42 @@
         const db = getFirestore(app);
 
         let currentUser = null;
+        let currentPage = 'chat';
+
+        // ROUTER
+        function navigate(page) {
+            currentPage = page;
+            document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+            document.getElementById(page + '-section').classList.add('active');
+            
+            document.querySelectorAll('.nav-link').forEach(link => {
+                link.classList.remove('active');
+                if (link.href.includes(page)) link.classList.add('active');
+            });
+            
+            updateAuthUI();
+        }
+
+        window.addEventListener('hashchange', () => {
+            const page = window.location.hash.slice(2) || 'chat';
+            navigate(page);
+        });
+
+        // Initial route
+        const initialPage = window.location.hash.slice(2) || 'chat';
+        navigate(initialPage);
+
+        document.getElementById('home-link').addEventListener('click', () => {
+            window.location.hash = '#/chat';
+        });
+
+        // LOGIN TOGGLE
+        document.getElementById('login-toggle').addEventListener('click', () => {
+            document.getElementById('auth-section').classList.add('active');
+            document.querySelectorAll('.section').forEach(s => {
+                if (s !== document.getElementById('auth-section')) s.classList.remove('active');
+            });
+        });
 
         // AUTH TABS
         document.getElementById('signup-tab').addEventListener('click', () => {
@@ -460,7 +542,7 @@
                     createdAt: new Date()
                 });
                 currentUser = { uid: userCredential.user.uid, username: username };
-                showMainApp();
+                navigate(currentPage);
             } catch (error) {
                 errorDiv.textContent = 'signup failed';
             }
@@ -497,45 +579,43 @@
                 
                 const userCredential = await signInAnonymously(auth);
                 currentUser = { uid: userCredential.user.uid, username: username };
-                showMainApp();
-                
+                navigate(currentPage);
             } catch (error) {
                 errorDiv.textContent = 'login failed';
             }
         });
 
-        document.getElementById('logoutBtn').addEventListener('click', async () => {
-            await signOut(auth);
-            currentUser = null;
-            document.getElementById('auth-section').style.display = 'block';
-            document.getElementById('main-app').style.display = 'none';
-            document.getElementById('signup-username').value = '';
-            document.getElementById('signup-password').value = '';
-            document.getElementById('signup-password-confirm').value = '';
-            document.getElementById('login-username').value = '';
-            document.getElementById('login-password').value = '';
-        });
-
-        function showMainApp() {
-            document.getElementById('auth-section').style.display = 'none';
-            document.getElementById('main-app').style.display = 'block';
-            document.getElementById('current-user').textContent = currentUser.username;
-            loadChat();
-            loadForum();
-            loadBlog();
-            loadConversations();
+        // UPDATE AUTH UI
+        function updateAuthUI() {
+            const userDisplay = document.getElementById('user-display');
+            const loginBtn = document.getElementById('login-toggle');
+            
+            document.querySelectorAll('.post-form').forEach(f => f.classList.remove('visible'));
+            document.querySelectorAll('.login-prompt').forEach(p => p.innerHTML = '');
+            
+            if (currentUser) {
+                userDisplay.textContent = currentUser.username;
+                loginBtn.textContent = 'logout';
+                loginBtn.onclick = logout;
+                document.getElementById(currentPage + '-form').classList.add('visible');
+            } else {
+                userDisplay.textContent = 'public mode';
+                loginBtn.textContent = 'login';
+                loginBtn.onclick = () => {
+                    document.getElementById('auth-section').classList.add('active');
+                };
+                const prompt = document.getElementById(currentPage + '-login-prompt');
+                if (prompt) {
+                    prompt.innerHTML = '<a href="#auth" class="login-link">login to post</a>';
+                }
+            }
         }
 
-        // NAVIGATION
-        document.querySelectorAll('.nav-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                const section = e.target.dataset.section;
-                document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
-                document.getElementById(section + '-section').classList.add('active');
-                document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-                e.target.classList.add('active');
-            });
-        });
+        function logout() {
+            currentUser = null;
+            updateAuthUI();
+            navigate(currentPage);
+        }
 
         // CHAT
         function loadChat() {
@@ -561,6 +641,7 @@
         });
 
         async function sendMessage() {
+            if (!currentUser) return alert('login to post');
             const input = document.getElementById('chat-input');
             const text = input.value.trim();
             if (!text) return;
@@ -585,6 +666,7 @@
         }
 
         document.getElementById('postThreadBtn').addEventListener('click', async () => {
+            if (!currentUser) return alert('login to post');
             const title = document.getElementById('thread-title').value.trim();
             const content = document.getElementById('thread-content').value.trim();
             if (!title || !content) return alert('fill in all fields');
@@ -612,6 +694,7 @@
         }
 
         document.getElementById('postBlogBtn').addEventListener('click', async () => {
+            if (!currentUser) return alert('login to post');
             const title = document.getElementById('blog-title').value.trim();
             const content = document.getElementById('blog-content').value.trim();
             if (!title || !content) return alert('fill in all fields');
@@ -627,8 +710,8 @@
             loadBlog();
         });
 
-        // CONVERSATIONS
-        async function loadConversations() {
+        // TRANSCRIPTS
+        async function loadTranscripts() {
             const q = query(collection(db, 'conversations'), orderBy('timestamp', 'desc'));
             const snapshot = await getDocs(q);
             const list = document.getElementById('conversations-list');
@@ -639,6 +722,7 @@
         }
 
         document.getElementById('postConvBtn').addEventListener('click', async () => {
+            if (!currentUser) return alert('login to post');
             const title = document.getElementById('conv-title').value.trim();
             const content = document.getElementById('conv-content').value.trim();
             if (!title || !content) return alert('fill in all fields');
@@ -651,7 +735,7 @@
             });
             document.getElementById('conv-title').value = '';
             document.getElementById('conv-content').value = '';
-            loadConversations();
+            loadTranscripts();
         });
 
         // POST RENDERER
@@ -672,12 +756,15 @@
                             <strong>${c.username}:</strong> ${c.text}
                         </div>
                     `).join('')}
-                    <input type="text" class="comment-input" data-id="${id}" data-type="${type}" placeholder="reply..." />
-                    <button class="primary comment-btn" data-id="${id}" data-type="${type}">post</button>
+                    <div style="margin-top: 0.5rem;">
+                        <input type="text" class="comment-input" data-id="${id}" data-type="${type}" placeholder="reply..." />
+                        <button class="primary comment-btn" data-id="${id}" data-type="${type}">post</button>
+                    </div>
                 </div>
             `;
 
             post.querySelector('.comment-btn').addEventListener('click', async (e) => {
+                if (!currentUser) return alert('login to comment');
                 const postId = e.target.dataset.id;
                 const postType = e.target.dataset.type;
                 const input = post.querySelector('.comment-input');
@@ -694,13 +781,6 @@
                 });
                 input.value = '';
                 
-                if (postType === 'conversations') loadConversations();
+                if (postType === 'conversations') loadTranscripts();
                 else if (postType === 'posts') loadBlog();
                 else if (postType === 'threads') loadForum();
-            });
-
-            return post;
-        }
-    </script>
-</body>
-</html>
