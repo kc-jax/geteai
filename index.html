@@ -183,6 +183,7 @@
         #chat-messages {
             height: 350px;
             overflow-y: auto;
+            overflow-x: hidden;
             border: 1px solid #7cb342;
             padding: 0.8rem;
             margin-bottom: 0.8rem;
@@ -193,9 +194,27 @@
         #chat-messages::-webkit-scrollbar-track { background: rgba(0,0,0,0.5); }
         #chat-messages::-webkit-scrollbar-thumb { background: #7cb342; }
         
-        .message { margin: 0.5rem 0; border-left: 1px solid #7cb342; padding-left: 0.6rem; font-size: 0.95rem; }
+        .message { 
+            margin: 0.5rem 0; 
+            border-left: 1px solid #7cb342; 
+            padding-left: 0.6rem; 
+            font-size: 0.95rem;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+            word-break: break-word;
+            max-width: 100%;
+        }
+        
         .message .username { color: #7cb342; font-weight: bold; }
         .message .time { color: #5a8c2f; font-size: 0.8rem; }
+        
+        .message > div {
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+            word-break: break-word;
+            white-space: pre-wrap;
+            max-width: 100%;
+        }
         
         .section-header {
             font-size: 1.5rem;
@@ -214,7 +233,14 @@
         
         .post-title { font-size: 1.2rem; margin-bottom: 0.3rem; font-weight: bold; }
         .post-meta { font-size: 0.85rem; opacity: 0.8; margin-bottom: 0.6rem; }
-        .post-content { line-height: 1.5; white-space: pre-wrap; font-size: 0.95rem; }
+        .post-content { 
+            line-height: 1.5; 
+            white-space: pre-wrap; 
+            font-size: 0.95rem;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+            word-break: break-word;
+        }
         
         .comments {
             margin-top: 0.8rem;
@@ -227,6 +253,9 @@
             border-left: 1px solid rgba(124,179,66,0.3);
             padding-left: 0.6rem;
             font-size: 0.9rem;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+            word-break: break-word;
         }
         
         .form-section {
