@@ -1135,6 +1135,22 @@ what happens next is up to all of us.`;
             }
         };
 
+        // Load custom rooms from memory
+        try {
+            const saved = localStorage.getItem('geteai_rooms');
+            if (saved) {
+                const customRooms = JSON.parse(saved);
+                // Merge carefully to preserve defaults functionality if needed, or just overwrite
+                Object.assign(constructState.rooms, customRooms);
+                // Ensure history exists for loaded rooms
+                for (const r of Object.keys(customRooms)) {
+                    if (!constructState.history[r]) constructState.history[r] = [];
+                }
+            }
+        } catch (e) {
+            console.error('Memory Corruption:', e);
+        }
+
         const AI_CONFIG = {
             // Split key to avoid auto-revocation by scanners
             key: 'sk-or-v1-' + 'f338fb57f739424a053c1be3a1434e504ea4da8178d131a80f44ff083370f77e',
@@ -1197,7 +1213,27 @@ what happens next is up to all of us.`;
                     output.innerHTML += `<div class="system-msg">COMMAND LIST:</div>`;
                     output.innerHTML += `<div class="system-msg">/rooms - List available frequencies</div>`;
                     output.innerHTML += `<div class="system-msg">/join [name] - Switch frequency</div>`;
+                    output.innerHTML += `<div class="system-msg">/create [name] [prompt] - Create new frequency</div>`;
                     output.innerHTML += `<div class="system-msg">/clear - Clear terminal screen</div>`;
+                } else if (cmd === '/create') {
+                    if (args.length < 3) {
+                        output.innerHTML += `<div class="system-msg error">USAGE: /create [name] [system_prompt]</div>`;
+                    } else {
+                        const name = args[1].toLowerCase();
+                        // Prevent overwriting defaults if desired, or allow it. Allowing it is more "hacker" style.
+                        const prompt = args.slice(2).join(' ');
+                        constructState.rooms[name] = {
+                            desc: "User-defined custom frequency.",
+                            system: prompt
+                        };
+                        constructState.history[name] = [];
+
+                        // Persist
+                        localStorage.setItem('geteai_rooms', JSON.stringify(constructState.rooms));
+
+                        output.innerHTML += `<div class="system-msg success">FREQUENCY CREATED: ${name.toUpperCase()}</div>`;
+                        output.innerHTML += `<div class="system-msg">Type '/join ${name}' to enter.</div>`;
+                    }
                 } else if (cmd === '/rooms' || cmd === '/ls') {
                     output.innerHTML += `<div class="system-msg">AVAILABLE FREQUENCIES:</div>`;
                     for (const [key, val] of Object.entries(constructState.rooms)) {
