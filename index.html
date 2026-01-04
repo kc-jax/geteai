@@ -1156,7 +1156,9 @@ what happens next is up to all of us.`;
                     method: "POST",
                     headers: {
                         "Authorization": `Bearer ${AI_CONFIG.key}`,
-                        "Content-Type": "application/json"
+                        "Content-Type": "application/json",
+                        "HTTP-Referer": "https://geteai.org",
+                        "X-Title": "geteai - The Construct"
                     },
                     body: JSON.stringify({
                         "model": AI_CONFIG.model,
