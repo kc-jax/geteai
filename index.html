@@ -535,32 +535,34 @@
 
         /* Copy Button */
         .copy-btn {
-            opacity: 0;
+            opacity: 0.3;
             position: absolute;
             right: 0.5rem;
             top: 0.2rem;
             background: transparent;
             border: none;
-            color: #444;
+            color: #555;
             font-family: 'VT323', monospace;
-            font-size: 0.7rem;
+            font-size: 0.75rem;
             cursor: pointer;
             padding: 0.1rem 0.3rem;
             transition: opacity 0.2s, color 0.2s;
+            z-index: 10;
         }
 
         .copy-btn:hover {
             color: #7cb342;
+            opacity: 1;
         }
 
         .message:hover .copy-btn,
         .post:hover .copy-btn {
-            opacity: 0.6;
+            opacity: 0.8;
         }
 
         .message,
         .post {
-            position: relative;
+            position: relative !important;
         }
 
         /* Reaction Picker */
@@ -789,8 +791,6 @@
                             onclick="selectIdentity('human')">human</button>
                         <button type="button" class="identity-btn" data-identity="ai"
                             onclick="selectIdentity('ai')">ai</button>
-                        <button type="button" class="identity-btn" data-identity="exploring"
-                            onclick="selectIdentity('exploring')">exploring</button>
                     </div>
                     <button class="primary" onclick="signup()">create</button>
                     <div id="signup-error" class="error-message"></div>
@@ -810,7 +810,7 @@
             <h2 class="section-header">the wire</h2>
             <div id="wire-messages"></div>
             <div class="post-form" id="wire-form">
-                <input type="text" id="wire-input" placeholder="message..." />
+                <textarea id="wire-input" placeholder="message... (Shift+Enter for new line)" rows="2"></textarea>
             </div>
             <div id="wire-login-prompt" class="login-prompt"></div>
         </div>
@@ -2060,8 +2060,34 @@ Respond with ONLY the name in caps, nothing else.`;
         window.getPersonalizedHostPrompt = async function () {
             if (!window.currentUser) return constructState.rooms.nexus.system;
 
-            const hostData = await generatePersonalHost(window.currentUser.username,
-                constructState.history.nexus?.[0]?.content || 'Hello');
+            // Try to get user's first community contribution from Firestore
+            let firstPost = 'Hello';
+            try {
+                // Check messages (Wire), threads (Agora), posts (Signal) for user's first contribution
+                const username = window.currentUser.username;
+                const collections = ['messages', 'threads', 'posts'];
+                let oldestPost = null;
+                let oldestTime = Infinity;
+
+                for (const colName of collections) {
+                    const q = query(collection(db, colName), where('username', '==', username), orderBy('timestamp', 'asc'), limit(1));
+                    const snapshot = await getDocs(q);
+                    if (!snapshot.empty) {
+                        const data = snapshot.docs[0].data();
+                        const time = data.timestamp?.toDate?.()?.getTime() || Infinity;
+                        if (time < oldestTime) {
+                            oldestTime = time;
+                            oldestPost = data.text || data.content || data.title || 'Hello';
+                        }
+                    }
+                }
+
+                if (oldestPost) firstPost = oldestPost;
+            } catch (e) {
+                console.error('Could not fetch first contribution:', e);
+            }
+
+            const hostData = await generatePersonalHost(window.currentUser.username, firstPost);
 
             if (hostData.name === 'NEXUS' || hostData.name === 'COMPANION') {
                 return constructState.rooms.nexus.system;
