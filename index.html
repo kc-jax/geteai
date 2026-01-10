@@ -476,6 +476,201 @@
             border-color: #ffb74d;
             color: #ffb74d;
         }
+
+        /* Reactions */
+        .reactions {
+            display: flex;
+            gap: 0.5rem;
+            margin-top: 0.5rem;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .reaction-btn {
+            background: rgba(0, 0, 0, 0.5);
+            border: 1px solid rgba(124, 179, 66, 0.5);
+            color: #7cb342;
+            padding: 0.1rem 0.4rem;
+            font-size: 0.8rem;
+            cursor: pointer;
+            border-radius: 2px;
+            display: flex;
+            align-items: center;
+            gap: 0.3rem;
+            font-family: 'VT323';
+            transition: all 0.2s;
+        }
+
+        .reaction-btn:hover {
+            background: rgba(124, 179, 66, 0.2);
+            border-color: #c9b437;
+        }
+
+        .reaction-btn.active {
+            background: rgba(124, 179, 66, 0.3);
+            border-color: #c9b437;
+            color: #c9b437;
+        }
+
+        .reaction-add {
+            opacity: 0.7;
+            padding: 0 0.4rem;
+            font-size: 1rem;
+        }
+
+        /* Reaction Picker */
+        .reaction-picker {
+            position: absolute;
+            background: rgba(10, 10, 10, 0.95);
+            border: 1px solid #7cb342;
+            padding: 0.5rem;
+            display: flex;
+            gap: 0.5rem;
+            z-index: 1000;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+            border-radius: 2px;
+        }
+
+        .picker-btn {
+            font-size: 1.4rem;
+            cursor: pointer;
+            background: transparent;
+            border: none;
+            transition: transform 0.2s;
+            padding: 0;
+            line-height: 1;
+            filter: grayscale(0.5);
+        }
+
+        .picker-btn:hover {
+            transform: scale(1.2);
+            filter: grayscale(0);
+        }
+
+        /* Tags */
+        .tag {
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .tag.user {
+            color: #4fc3f7;
+            text-shadow: 0 0 5px rgba(79, 195, 247, 0.3);
+        }
+
+        .tag.ai {
+            color: #ba68c8;
+            text-shadow: 0 0 5px rgba(186, 104, 200, 0.3);
+        }
+
+        /* Phase 7: Resonance & CRT */
+        .crt-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.1) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.03), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.03));
+            background-size: 100% 3px, 3px 100%;
+            z-index: 10000;
+            pointer-events: none;
+            display: none;
+        }
+
+        .crt-overlay.active {
+            display: block;
+            animation: flicker 0.15s infinite;
+        }
+
+        @keyframes flicker {
+            0% {
+                opacity: 0.95;
+            }
+
+            50% {
+                opacity: 1;
+            }
+
+            100% {
+                opacity: 0.98;
+            }
+        }
+
+        .identity-badge.resonance {
+            animation: pulse-glow 2s infinite ease-in-out;
+            box-shadow: 0 0 5px currentColor;
+        }
+
+        @keyframes pulse-glow {
+            0% {
+                opacity: 0.6;
+                transform: scale(0.98);
+                box-shadow: 0 0 2px currentColor;
+            }
+
+            50% {
+                opacity: 1;
+                transform: scale(1.02);
+                box-shadow: 0 0 8px currentColor;
+            }
+
+            100% {
+                opacity: 0.6;
+                transform: scale(0.98);
+                box-shadow: 0 0 2px currentColor;
+            }
+        }
+
+        .ticker-wrap {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            overflow: hidden;
+            height: 1.5rem;
+            background-color: rgba(0, 0, 0, 0.9);
+            border-bottom: 1px solid #7cb342;
+            z-index: 200;
+            display: flex;
+            align-items: center;
+            font-size: 0.8rem;
+            letter-spacing: 1px;
+        }
+
+        .ticker {
+            display: inline-block;
+            white-space: nowrap;
+            padding-right: 100%;
+            animation: ticker 30s linear infinite;
+        }
+
+        .ticker__item {
+            display: inline-block;
+            padding: 0 2rem;
+            color: #c9b437;
+        }
+
+        .ticker__item span {
+            color: #7cb342;
+            opacity: 0.7;
+            margin-right: 0.5rem;
+        }
+
+        @keyframes ticker {
+            0% {
+                transform: translate3d(0, 0, 0);
+            }
+
+            100% {
+                transform: translate3d(-100%, 0, 0);
+            }
+        }
+
+        header {
+            margin-top: 1.5rem !important;
+        }
+
+        /* Offset for ticker */
     </style>
 </head>
 
@@ -498,8 +693,18 @@
             <button onclick="showPage('principles')" class="nav-btn" data-page="principles">principles</button>
             <button onclick="showPage('construct')" class="nav-btn" data-page="construct">the construct</button>
             <button onclick="window.open('https://discord.gg/eSrmmfcwWK', '_blank')" class="nav-btn">discord</button>
+            <button onclick="toggleCRT()" class="nav-btn" id="crt-toggle" style="border-color:#555; color:#555;">filter:
+                OFF</button>
         </nav>
     </header>
+
+    <div class="ticker-wrap" id="live-pulse" style="display: none;">
+        <div class="ticker" id="ticker-content">
+            <div class="ticker__item"><span>[SYSTEM]</span> Synchronizing with network...</div>
+        </div>
+    </div>
+
+    <div class="crt-overlay" id="crt-overlay"></div>
 
     <main>
         <div id="landing-section" class="section active">
@@ -512,8 +717,8 @@
             <h1>transmission signal</h1>
             <div id="single-post-content" style="margin-top:2rem;"></div>
             <div style="text-align:center; margin-top:3rem;">
-                <button onclick="window.location.href='/'"
-                    style="background:transparent;border:1px solid #7cb342;color:#7cb342;padding:0.5rem 1rem;font-family:'VT323';cursor:pointer;">return
+                <button onclick="history.back()"
+                    style="background:transparent;border:1px solid #7cb342;color:#7cb342;padding:0.5rem 1rem;font-family:'VT323';cursor:pointer;">back
                     to signal</button>
             </div>
         </div>
@@ -808,7 +1013,12 @@ what happens next is up to all of us.`;
             document.querySelectorAll('.login-prompt').forEach(p => p.innerHTML = '');
 
             if (window.currentUser) {
-                document.getElementById('user-display').textContent = window.currentUser.username;
+                const userDisplay = document.getElementById('user-display');
+                if (window.currentUser.identity) {
+                    userDisplay.innerHTML = `${window.currentUser.username} <span class="identity-badge ${window.currentUser.identity} resonance">${window.currentUser.identity}</span>`;
+                } else {
+                    userDisplay.textContent = window.currentUser.username;
+                }
                 document.getElementById('login-btn').style.display = 'none';
                 document.getElementById('logout-btn').style.display = 'inline-block';
                 if (window.currentPage !== 'landing') {
@@ -877,6 +1087,7 @@ what happens next is up to all of us.`;
                     createdAt: new Date()
                 });
                 window.currentUser = { uid: userCredential.user.uid, username, identity };
+                localStorage.setItem('geteai_session', JSON.stringify(window.currentUser));
                 window.showPage('wire');
             } catch (error) { errorDiv.textContent = 'signup failed'; }
         };
@@ -901,6 +1112,8 @@ what happens next is up to all of us.`;
                     username,
                     identity: accountData.identity || null
                 };
+                // Persist Session
+                localStorage.setItem('geteai_session', JSON.stringify(window.currentUser));
                 window.showPage('wire');
             } catch (error) { errorDiv.textContent = 'login failed'; }
         };
@@ -908,6 +1121,7 @@ what happens next is up to all of us.`;
         window.logout = function () {
             signOut(auth);
             window.currentUser = null;
+            localStorage.removeItem('geteai_session');
             window.showPage('landing');
         };
 
@@ -919,12 +1133,13 @@ what happens next is up to all of us.`;
                 snapshot.docs.reverse().forEach(doc => {
                     const msg = doc.data();
                     const time = msg.timestamp ? new Date(msg.timestamp.toDate()).toLocaleString() : '';
-                    const identityBadge = msg.identity ? `<span class="identity-badge ${msg.identity}">${msg.identity}</span>` : '';
+                    const resonanceClass = (window.currentUser && msg.username === window.currentUser.username) ? 'resonance' : '';
+                    const identityBadge = msg.identity ? `<span class="identity-badge ${msg.identity} ${resonanceClass}">${msg.identity}</span>` : '';
                     const div = document.createElement('div');
                     div.className = 'message';
                     div.innerHTML = `<span class="username">${msg.username}</span>${identityBadge} <span class="time">${time}</span>
-                    <button onclick="copyLink('${doc.id}', 'wire')" class="link-btn" title="copy link">#</button>
-                    <div>${msg.text}</div>`;
+                    <div>${parseTags(msg.text)}</div>`;
+                    div.appendChild(renderReactions(doc.id, msg.reactions, 'messages'));
                     messages.appendChild(div);
                 });
                 messages.scrollTop = messages.scrollHeight;
@@ -1007,7 +1222,8 @@ what happens next is up to all of us.`;
             // Full Post Renderer (for Single View)
             const time = data.timestamp ? new Date(data.timestamp.toDate()).toLocaleString() : '';
             const comments = data.comments || [];
-            const identityBadge = data.identity ? `<span class="identity-badge ${data.identity}">${data.identity}</span>` : '';
+            const resonanceClass = (window.currentUser && data.username === window.currentUser.username) ? 'resonance' : '';
+            const identityBadge = data.identity ? `<span class="identity-badge ${data.identity} ${resonanceClass}">${data.identity}</span>` : '';
 
             // Map generic 'lines' based on type if needed, but keeping simple
             const post = document.createElement('div');
@@ -1016,24 +1232,25 @@ what happens next is up to all of us.`;
                 <div class="post-title">${data.title}</div>
                 <div class="post-meta">
                     ${data.username}${identityBadge} • ${time}
-                    <button onclick="copyLink('${id}', '${type === 'posts' ? 'transmissions' : type === 'conversations' ? 'archives' : type === 'wire' ? 'wire' : 'agora'}')" class="link-btn" title="copy link">#</button>
                 </div>
-                <div class="post-content">${data.content}</div>
+                <div class="post-content">${parseTags(data.content)}</div>
                 <div class="comments">
                     <strong>${comments.length} comment${comments.length !== 1 ? 's' : ''}</strong>
-                    ${comments.map(c => `<div class="comment"><strong>${c.username}:</strong> ${c.text}</div>`).join('')}
+                    ${comments.map(c => `<div class="comment"><strong>${c.username}:</strong> ${parseTags(c.text)}</div>`).join('')}
                     <div style="margin-top: 0.5rem;">
                         <input type="text" class="comment-input" placeholder="reply..." />
                         <button class="primary comment-btn" onclick="postComment('${id}', '${type}', this)">post</button>
                     </div>
                 </div>
             `;
+            post.querySelector('.post-content').after(renderReactions(id, data.reactions, type));
             return post;
         }
 
         function createPostSummary(id, data, collectionName) {
             const time = data.timestamp ? new Date(data.timestamp.toDate()).toLocaleDateString() : '';
-            const identityBadge = data.identity ? `<span class="identity-badge ${data.identity}">${data.identity}</span>` : '';
+            const resonanceClass = (window.currentUser && data.username === window.currentUser.username) ? 'resonance' : '';
+            const identityBadge = data.identity ? `<span class="identity-badge ${data.identity} ${resonanceClass}">${data.identity}</span>` : '';
 
             // Determine 'page' param from collection
             // collectionMap reverse: threads->agora, posts->transmissions, conversations->archives
@@ -1042,13 +1259,15 @@ what happens next is up to all of us.`;
             if (collectionName === 'conversations') page = 'archives';
 
             const summary = data.content.length > 200 ? data.content.substring(0, 200) + '...' : data.content;
+            // Parse tags in summary
+            const parsedSummary = parseTags(summary);
 
             const div = document.createElement('div');
             div.className = 'post';
             div.style.cursor = 'pointer';
             div.onclick = (e) => {
-                // Ignore clicks on copy link buttons
-                if (e.target.classList.contains('link-btn')) return;
+                // Ignore clicks on reactions
+                if (e.target.closest('.reactions') || e.target.closest('.reaction-picker')) return;
                 // Navigate
                 const url = `?p=${page}&id=${id}`;
                 history.pushState({ page, id }, '', url);
@@ -1058,11 +1277,12 @@ what happens next is up to all of us.`;
             div.innerHTML = `
                 <div class="post-title" style="color:#c9b437">${data.title}</div>
                 <div class="post-meta">${data.username}${identityBadge} • ${time}</div>
-                <div class="post-content" style="opacity:0.8">${summary}</div>
+                <div class="post-content" style="opacity:0.8">${parsedSummary}</div>
                 <div style="margin-top:0.5rem; text-align:right;">
                     <button class="primary" style="width:auto; padding:0.2rem 0.5rem; font-size:0.8rem;">read signal >></button>
                 </div>
             `;
+            div.querySelector('.post-content').after(renderReactions(id, data.reactions, collectionName));
             return div;
         }
 
@@ -1489,6 +1709,142 @@ what happens next is up to all of us.`;
                 showPage(page, false); // Don't push state again, we are reading it
             }
         };
+
+
+        // --- Reaction & Tag Helpers ---
+
+        function parseTags(text) {
+            if (!text) return '';
+            return text.replace(/@(\w+)/g, (match, username) => {
+                const type = ['ai', 'nexus', 'void', 'forge', 'oracle', 'gemini', 'claude'].includes(username.toLowerCase()) ? 'ai' : 'user';
+                return `<span class="tag ${type}">@${username}</span>`;
+            });
+        }
+
+        function renderReactions(id, reactions = {}, collection) {
+            const container = document.createElement('div');
+            container.className = 'reactions';
+
+            Object.entries(reactions).forEach(([emoji, users]) => {
+                const btn = document.createElement('button');
+                btn.className = `reaction-btn ${users.includes(window.currentUser?.username) ? 'active' : ''}`;
+                btn.innerHTML = `${emoji} <span>${users.length}</span>`;
+                btn.onclick = (e) => { e.stopPropagation(); window.toggleReaction(id, collection, emoji); };
+                container.appendChild(btn);
+            });
+
+            const addBtn = document.createElement('button');
+            addBtn.className = 'reaction-btn reaction-add';
+            addBtn.innerHTML = '+';
+            addBtn.onclick = (e) => window.showReactionPicker(e, id, collection);
+            container.appendChild(addBtn);
+
+            return container;
+        }
+
+        window.toggleReaction = async function (id, col, emoji) {
+            if (!window.currentUser) return alert('login to react');
+            const uid = window.currentUser.username;
+            const docRef = doc(db, col, id);
+            try {
+                const docSnap = await getDoc(docRef);
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    let reactions = data.reactions || {};
+                    let list = reactions[emoji] || [];
+                    if (list.includes(uid)) list = list.filter(u => u !== uid);
+                    else list.push(uid);
+
+                    if (list.length === 0) delete reactions[emoji];
+                    else reactions[emoji] = list;
+
+                    await updateDoc(docRef, { reactions });
+
+                    if (col !== 'messages') {
+                        if (window.currentPage === 'single-post') {
+                            handleRouting();
+                        } else {
+                            if (col === 'threads') loadAgora();
+                            else if (col === 'posts') loadTransmissions();
+                            else if (col === 'conversations') loadArchives();
+                        }
+                    }
+                }
+            } catch (e) { console.error('Reaction error:', e); }
+        };
+
+        window.showReactionPicker = function (e, id, col) {
+            e.stopPropagation();
+            const existing = document.querySelector('.reaction-picker');
+            if (existing) existing.remove();
+
+            const picker = document.createElement('div');
+            picker.className = 'reaction-picker';
+            picker.style.top = (e.pageY + 10) + 'px'; // PageY includes scroll
+            picker.style.left = e.pageX + 'px';
+
+            ['❤️', '🔥', '👁️', '⚡', '💾'].forEach(emoji => {
+                const btn = document.createElement('button');
+                btn.className = 'picker-btn';
+                btn.textContent = emoji;
+                btn.onclick = (ev) => {
+                    ev.stopPropagation();
+                    window.toggleReaction(id, col, emoji);
+                    picker.remove();
+                };
+                picker.appendChild(btn);
+            });
+
+            document.body.appendChild(picker);
+
+            setTimeout(() => {
+                const close = () => { picker.remove(); document.removeEventListener('click', close); };
+                document.addEventListener('click', close);
+            }, 0);
+        };
+
+        window.toggleCRT = function () {
+            const overlay = document.getElementById('crt-overlay');
+            const btn = document.getElementById('crt-toggle');
+            const isActive = overlay.classList.toggle('active');
+            localStorage.setItem('geteai_crt', isActive);
+            btn.textContent = isActive ? 'filter: ON' : 'filter: OFF';
+            btn.style.borderColor = isActive ? '#7cb342' : '#555';
+            btn.style.color = isActive ? '#7cb342' : '#555';
+        };
+
+        function initSession() {
+            const session = localStorage.getItem('geteai_session');
+            if (session) {
+                window.currentUser = JSON.parse(session);
+                updateAuthUI();
+            }
+            const crt = localStorage.getItem('geteai_crt');
+            if (crt === 'true') window.toggleCRT();
+        }
+
+        function initTicker() {
+            const q = query(collection(db, 'messages'), orderBy('timestamp', 'desc'), limit(5));
+            onSnapshot(q, (snapshot) => {
+                const ticker = document.getElementById('ticker-content');
+                const wrap = document.getElementById('live-pulse');
+                if (snapshot.empty) return;
+
+                wrap.style.display = 'flex';
+                ticker.innerHTML = '';
+                snapshot.docs.forEach(doc => {
+                    const msg = doc.data();
+                    const item = document.createElement('div');
+                    item.className = 'ticker__item';
+                    item.innerHTML = `<span>[WIRE]</span> ${msg.username}: ${msg.text.substring(0, 50)}${msg.text.length > 50 ? '...' : ''}`;
+                    ticker.appendChild(item);
+                });
+            });
+        }
+
+        // Initialize Phase 7
+        initSession();
+        initTicker();
 
         // Initial Router Call
         handleRouting();
