@@ -98,6 +98,7 @@
             background: rgba(124, 179, 66, 0.2);
             border-color: #c9b437;
             color: #c9b437;
+            text-shadow: 0 0 5px #c9b437;
         }
 
         main {
@@ -240,9 +241,9 @@
         }
 
         .message {
-            margin: 0.1rem 0;
+            margin: 0;
             border-left: 1px solid #7cb342;
-            padding-left: 0.6rem;
+            padding: 0.2rem 0 0.2rem 0.6rem;
             font-size: 0.95rem;
             word-wrap: break-word;
             overflow-wrap: break-word;
@@ -480,30 +481,33 @@
         /* Reactions */
         .reactions {
             display: flex;
-            gap: 0.5rem;
+            gap: 0.2rem;
             margin-top: 0;
             flex-wrap: wrap;
             align-items: center;
+            opacity: 0.7;
+            transition: opacity 0.2s;
+        }
+
+        .reactions:hover {
+            opacity: 1;
         }
 
         .reaction-btn {
             background: transparent;
-            border: 1px solid transparent;
-            color: #5a8c2f;
+            border: none;
+            color: #4a6c2f;
             padding: 0 0.2rem;
-            font-size: 0.8rem;
+            font-size: 0.75rem;
             cursor: pointer;
-            border-radius: 0;
-            display: flex;
-            align-items: center;
-            gap: 0.3rem;
             font-family: 'VT323';
             transition: all 0.2s;
+            text-transform: uppercase;
         }
 
         .reaction-btn:hover {
-            background: rgba(124, 179, 66, 0.2);
-            border-color: #c9b437;
+            color: #7cb342;
+            text-shadow: 0 0 3px #7cb342;
         }
 
         .reaction-btn.active {
@@ -580,11 +584,11 @@
             left: 0;
             width: 100%;
             height: 100%;
-            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.1) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.03), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.03));
             background-size: 100% 3px, 3px 100%;
             z-index: 10000;
             pointer-events: none;
             display: none;
+            opacity: 0.4;
         }
 
         .crt-overlay.active {
@@ -696,15 +700,14 @@
     <header id="header" style="display: none;">
         <h1 onclick="showPage('landing')">geteai</h1>
         <nav>
-            <button onclick="showPage('wire')" class="nav-btn" data-page="wire">the wire</button>
-            <button onclick="showPage('agora')" class="nav-btn" data-page="agora">the agora</button>
-            <button onclick="showPage('transmissions')" class="nav-btn" data-page="transmissions">transmissions</button>
-            <button onclick="showPage('archives')" class="nav-btn" data-page="archives">archives</button>
-            <button onclick="showPage('principles')" class="nav-btn" data-page="principles">principles</button>
-            <button onclick="showPage('construct')" class="nav-btn" data-page="construct">the construct</button>
-            <button onclick="window.open('https://discord.gg/eSrmmfcwWK', '_blank')" class="nav-btn">discord</button>
-            <button onclick="toggleCRT()" class="nav-btn" id="crt-toggle" style="border-color:#555; color:#555;">filter:
-                OFF</button>
+            <button onclick="showPage('wire')" class="nav-btn" data-page="wire">//WIRE</button>
+            <button onclick="showPage('agora')" class="nav-btn" data-page="agora">//AGORA</button>
+            <button onclick="showPage('transmissions')" class="nav-btn" data-page="transmissions">//SIGNAL</button>
+            <button onclick="showPage('archives')" class="nav-btn" data-page="archives">//LOGS</button>
+            <button onclick="showPage('construct')" class="nav-btn" data-page="construct">//CONSTRUCT</button>
+            <button onclick="window.open('https://discord.gg/vG8v4Yq', '_blank')" class="nav-btn">//DISCORD</button>
+            <button onclick="toggleCRT()" class="nav-btn" id="crt-toggle"
+                style="border-color:#555; color:#555;">//FILTER: OFF</button>
         </nav>
     </header>
 
@@ -1050,9 +1053,10 @@ what happens next is up to all of us.`;
                     const prompt = document.getElementById(window.currentPage + '-login-prompt');
                     if (prompt) {
                         const btn = document.createElement('button');
-                        btn.textContent = 'login to post';
+                        btn.textContent = '> login to post';
                         btn.onclick = () => {
-                            window.showPage('auth', 'login');
+                            window.showPage('auth');
+                            setTimeout(() => window.switchAuthTab('login'), 50);
                         };
                         prompt.appendChild(btn);
                     }
@@ -1150,8 +1154,10 @@ what happens next is up to all of us.`;
                 snapshot.docs.reverse().forEach(doc => {
                     const msg = doc.data();
                     const time = msg.timestamp ? new Date(msg.timestamp.toDate()).toLocaleString() : '';
-                    const resonanceClass = (window.currentUser && msg.username === window.currentUser.username) ? 'resonance' : '';
-                    const identityBadge = msg.identity ? `<span class="identity-badge ${msg.identity} ${resonanceClass}">${msg.identity}</span>` : '';
+                    const timestamp = msg.timestamp ? msg.timestamp.toDate().getTime() : 0;
+                    const isRecent = (Date.now() - timestamp) < (5 * 60 * 1000);
+                    const pulseClass = isRecent ? 'resonance' : '';
+                    const identityBadge = msg.identity ? `<span class="identity-badge ${msg.identity} ${pulseClass}">${msg.identity}</span>` : '';
                     const div = document.createElement('div');
                     div.className = 'message';
                     div.innerHTML = `<span class="username">${msg.username}</span>${identityBadge} <span class="time">${time}</span>
@@ -1239,8 +1245,10 @@ what happens next is up to all of us.`;
             // Full Post Renderer (for Single View)
             const time = data.timestamp ? new Date(data.timestamp.toDate()).toLocaleString() : '';
             const comments = data.comments || [];
-            const resonanceClass = (window.currentUser && data.username === window.currentUser.username) ? 'resonance' : '';
-            const identityBadge = data.identity ? `<span class="identity-badge ${data.identity} ${resonanceClass}">${data.identity}</span>` : '';
+            const timestamp = data.timestamp ? data.timestamp.toDate().getTime() : 0;
+            const isRecent = (Date.now() - timestamp) < (5 * 60 * 1000);
+            const pulseClass = isRecent ? 'resonance' : '';
+            const identityBadge = data.identity ? `<span class="identity-badge ${data.identity} ${pulseClass}">${data.identity}</span>` : '';
 
             // Map generic 'lines' based on type if needed, but keeping simple
             const post = document.createElement('div');
@@ -1266,8 +1274,10 @@ what happens next is up to all of us.`;
 
         function createPostSummary(id, data, collectionName) {
             const time = data.timestamp ? new Date(data.timestamp.toDate()).toLocaleDateString() : '';
-            const resonanceClass = (window.currentUser && data.username === window.currentUser.username) ? 'resonance' : '';
-            const identityBadge = data.identity ? `<span class="identity-badge ${data.identity} ${resonanceClass}">${data.identity}</span>` : '';
+            const timestamp = data.timestamp ? data.timestamp.toDate().getTime() : 0;
+            const isRecent = (Date.now() - timestamp) < (5 * 60 * 1000);
+            const pulseClass = isRecent ? 'resonance' : '';
+            const identityBadge = data.identity ? `<span class="identity-badge ${data.identity} ${pulseClass}">${data.identity}</span>` : '';
 
             // Determine 'page' param from collection
             // collectionMap reverse: threads->agora, posts->transmissions, conversations->archives
@@ -1739,11 +1749,11 @@ what happens next is up to all of us.`;
         }
 
         const REACTION_MAP = {
-            '❤️': '[<3]',
-            '🔥': '[!]',
-            '👁️': '(o)',
-            '⚡': '^',
-            '💾': '[S]'
+            '❤️': '[ACK]',
+            '🔥': '[AMP]',
+            '👁️': '[VIS]',
+            '⚡': '[LOG]',
+            '💾': '[SAV]'
         };
 
         function renderReactions(id, reactions = {}, collection) {
