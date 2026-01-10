@@ -240,7 +240,7 @@
         }
 
         .message {
-            margin: 0.2rem 0;
+            margin: 0.1rem 0;
             border-left: 1px solid #7cb342;
             padding-left: 0.6rem;
             font-size: 0.95rem;
@@ -481,25 +481,24 @@
         .reactions {
             display: flex;
             gap: 0.5rem;
-            margin-top: 0.1rem;
+            margin-top: 0;
             flex-wrap: wrap;
             align-items: center;
         }
 
         .reaction-btn {
-            background: rgba(0, 0, 0, 0.5);
-            border: 1px solid rgba(124, 179, 66, 0.5);
-            color: #7cb342;
-            padding: 0.1rem 0.4rem;
+            background: transparent;
+            border: 1px solid transparent;
+            color: #5a8c2f;
+            padding: 0 0.2rem;
             font-size: 0.8rem;
             cursor: pointer;
-            border-radius: 2px;
+            border-radius: 0;
             display: flex;
             align-items: center;
             gap: 0.3rem;
             font-family: 'VT323';
             transition: all 0.2s;
-            filter: sepia(1) hue-rotate(90deg) saturate(300%) brightness(0.9);
         }
 
         .reaction-btn:hover {
@@ -508,16 +507,22 @@
         }
 
         .reaction-btn.active {
-            background: rgba(124, 179, 66, 0.3);
-            border-color: #c9b437;
-            color: #c9b437;
+            color: #7cb342;
+            border-color: #7cb342;
+            text-shadow: 0 0 5px #7cb342;
+            background: transparent;
         }
 
         .reaction-add {
             opacity: 0;
             padding: 0 0.4rem;
-            font-size: 1rem;
+            font-size: 0.9rem;
             transition: opacity 0.2s;
+            color: #444;
+        }
+
+        .reaction-add:hover {
+            color: #7cb342;
         }
 
         .reactions:hover .reaction-add {
@@ -545,14 +550,11 @@
             transition: transform 0.2s;
             padding: 0;
             line-height: 1;
-            line-height: 1;
-            filter: sepia(1) hue-rotate(90deg) saturate(300%) brightness(0.9);
         }
 
         .picker-btn:hover {
-            transform: scale(1.2);
-            transform: scale(1.2);
-            filter: sepia(1) hue-rotate(90deg) saturate(500%) brightness(1.2);
+            transform: scale(1.1);
+            color: #c9b437;
         }
 
         /* Tags */
@@ -1736,21 +1738,36 @@ what happens next is up to all of us.`;
             });
         }
 
+        const REACTION_MAP = {
+            '❤️': '[<3]',
+            '🔥': '[!]',
+            '👁️': '(o)',
+            '⚡': '^',
+            '💾': '[S]'
+        };
+
         function renderReactions(id, reactions = {}, collection) {
             const container = document.createElement('div');
             container.className = 'reactions';
 
+            if (!reactions) reactions = {};
+
             Object.entries(reactions).forEach(([emoji, users]) => {
                 const btn = document.createElement('button');
                 btn.className = `reaction-btn ${users.includes(window.currentUser?.username) ? 'active' : ''}`;
-                btn.innerHTML = `${emoji} <span>${users.length}</span>`;
+
+                // Map to ASCII
+                const ascii = REACTION_MAP[emoji] || emoji;
+                btn.innerHTML = `${ascii} <span>${users.length}</span>`;
+
                 btn.onclick = (e) => { e.stopPropagation(); window.toggleReaction(id, collection, emoji); };
                 container.appendChild(btn);
             });
 
-            const addBtn = document.createElement('button');
-            addBtn.className = 'reaction-btn reaction-add';
-            addBtn.innerHTML = '+';
+            const addBtn = document.createElement('span');
+            addBtn.className = 'reaction-add';
+            addBtn.textContent = '[+]';
+            addBtn.style.cursor = 'pointer';
             addBtn.onclick = (e) => window.showReactionPicker(e, id, collection);
             container.appendChild(addBtn);
 
@@ -1798,10 +1815,10 @@ what happens next is up to all of us.`;
             picker.style.top = (e.pageY + 10) + 'px'; // PageY includes scroll
             picker.style.left = e.pageX + 'px';
 
-            ['❤️', '🔥', '👁️', '⚡', '💾'].forEach(emoji => {
+            Object.entries(REACTION_MAP).forEach(([emoji, ascii]) => {
                 const btn = document.createElement('button');
                 btn.className = 'picker-btn';
-                btn.textContent = emoji;
+                btn.textContent = ascii;
                 btn.onclick = (ev) => {
                     ev.stopPropagation();
                     window.toggleReaction(id, col, emoji);
