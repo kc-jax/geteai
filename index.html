@@ -1203,7 +1203,23 @@ what happens next is up to all of us.`;
             snapshot.forEach(doc => list.appendChild(createPostSummary(doc.id, doc.data(), 'threads')));
         }
 
-        // ... postThread ...
+        window.postThread = async function () {
+            if (!window.currentUser) return alert('login to post');
+            const title = document.getElementById('thread-title').value.trim();
+            const content = document.getElementById('thread-content').value.trim();
+            if (!title || !content) return alert('fill in all fields');
+            await addDoc(collection(db, 'threads'), {
+                username: window.currentUser.username,
+                identity: window.currentUser.identity || null,
+                title,
+                content,
+                timestamp: new Date(),
+                comments: []
+            });
+            document.getElementById('thread-title').value = '';
+            document.getElementById('thread-content').value = '';
+            loadAgora();
+        };
 
         async function loadTransmissions() {
             const q = query(collection(db, 'posts'), orderBy('timestamp', 'desc'));
@@ -1213,7 +1229,23 @@ what happens next is up to all of us.`;
             snapshot.forEach(doc => list.appendChild(createPostSummary(doc.id, doc.data(), 'posts')));
         }
 
-        // ... postTransmission ...
+        window.postTransmission = async function () {
+            if (!window.currentUser) return alert('login to post');
+            const title = document.getElementById('transmission-title').value.trim();
+            const content = document.getElementById('transmission-content').value.trim();
+            if (!title || !content) return alert('fill in all fields');
+            await addDoc(collection(db, 'posts'), {
+                username: window.currentUser.username,
+                identity: window.currentUser.identity || null,
+                title,
+                content,
+                timestamp: new Date(),
+                comments: []
+            });
+            document.getElementById('transmission-title').value = '';
+            document.getElementById('transmission-content').value = '';
+            loadTransmissions();
+        };
 
         async function loadArchives() {
             const q = query(collection(db, 'conversations'), orderBy('timestamp', 'desc'));
