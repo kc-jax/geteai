@@ -240,7 +240,7 @@
         }
 
         .message {
-            margin: 0.5rem 0;
+            margin: 0.2rem 0;
             border-left: 1px solid #7cb342;
             padding-left: 0.6rem;
             font-size: 0.95rem;
@@ -481,7 +481,7 @@
         .reactions {
             display: flex;
             gap: 0.5rem;
-            margin-top: 0.5rem;
+            margin-top: 0.1rem;
             flex-wrap: wrap;
             align-items: center;
         }
@@ -499,6 +499,7 @@
             gap: 0.3rem;
             font-family: 'VT323';
             transition: all 0.2s;
+            filter: sepia(1) hue-rotate(90deg) saturate(300%) brightness(0.9);
         }
 
         .reaction-btn:hover {
@@ -544,12 +545,14 @@
             transition: transform 0.2s;
             padding: 0;
             line-height: 1;
-            filter: grayscale(0.5);
+            line-height: 1;
+            filter: sepia(1) hue-rotate(90deg) saturate(300%) brightness(0.9);
         }
 
         .picker-btn:hover {
             transform: scale(1.2);
-            filter: grayscale(0);
+            transform: scale(1.2);
+            filter: sepia(1) hue-rotate(90deg) saturate(500%) brightness(1.2);
         }
 
         /* Tags */
@@ -788,7 +791,7 @@
                     <input type="text" id="construct-input" placeholder="speak to the machine..."
                         style="width: 80%; background: transparent; border: none; color: #0f0; font-family: 'VT323', monospace; font-size: 1.2rem; outline: none;" />
                 </div>
-                <button id="construct-login-btn" class="primary" onclick="showPage('auth')"
+                <button id="construct-login-btn" class="primary" onclick="showPage('auth', 'login')"
                     style="display:none; margin-top: 1rem;">login to access</button>
             </div>
         </div>
@@ -980,10 +983,10 @@ what happens next is up to all of us.`;
             matrixTransition();
         };
 
-        window.showPage = function (page, push = true) {
+        window.showPage = function (page, tab = null, push = true) {
             if (push) {
                 const url = page === 'landing' ? 'index.html' : `?p=${page}`;
-                history.pushState({ page }, '', url);
+                history.pushState({ page, tab }, '', url);
             }
 
             if (page === 'landing') {
@@ -1001,6 +1004,12 @@ what happens next is up to all of us.`;
             if (section) section.classList.add('active');
 
             window.currentPage = page;
+
+            // Direct Tab Switch Logic
+            if (page === 'auth' && tab) {
+                switchAuthTab(tab);
+            }
+
             updateAuthUI();
 
             if (page === 'wire') loadWire();
@@ -1041,11 +1050,7 @@ what happens next is up to all of us.`;
                         const btn = document.createElement('button');
                         btn.textContent = 'login to post';
                         btn.onclick = () => {
-                            window.showPage('auth');
-                            // Stronger tab switch
-                            setTimeout(() => {
-                                if (window.switchAuthTab) window.switchAuthTab('login');
-                            }, 200);
+                            window.showPage('auth', 'login');
                         };
                         prompt.appendChild(btn);
                     }
