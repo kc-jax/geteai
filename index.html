@@ -513,9 +513,14 @@
         }
 
         .reaction-add {
-            opacity: 0.7;
+            opacity: 0;
             padding: 0 0.4rem;
             font-size: 1rem;
+            transition: opacity 0.2s;
+        }
+
+        .reactions:hover .reaction-add {
+            opacity: 0.7;
         }
 
         /* Reaction Picker */
@@ -718,8 +723,9 @@
             <div id="single-post-content" style="margin-top:2rem;"></div>
             <div style="text-align:center; margin-top:3rem;">
                 <button onclick="history.back()"
-                    style="background:transparent;border:1px solid #7cb342;color:#7cb342;padding:0.5rem 1rem;font-family:'VT323';cursor:pointer;">back
-                    to signal</button>
+                    style="background:transparent;border:1px solid #7cb342;color:#7cb342;padding:0.5rem 1rem;font-family:'VT323';cursor:pointer;">&lt;&lt;
+                    return
+                    to feed</button>
             </div>
         </div>
 
@@ -1034,9 +1040,13 @@ what happens next is up to all of us.`;
                     if (prompt) {
                         const btn = document.createElement('button');
                         btn.textContent = 'login to post';
-                        btn.textContent = 'login to post';
-                        btn.onclick = () => { window.showPage('auth'); setTimeout(() => window.switchAuthTab('login'), 100); };
-                        prompt.appendChild(btn);
+                        btn.onclick = () => {
+                            window.showPage('auth');
+                            // Stronger tab switch
+                            setTimeout(() => {
+                                if (window.switchAuthTab) window.switchAuthTab('login');
+                            }, 200);
+                        };
                         prompt.appendChild(btn);
                     }
                 }
@@ -1279,7 +1289,7 @@ what happens next is up to all of us.`;
                 <div class="post-meta">${data.username}${identityBadge} • ${time}</div>
                 <div class="post-content" style="opacity:0.8">${parsedSummary}</div>
                 <div style="margin-top:0.5rem; text-align:right;">
-                    <button class="primary" style="width:auto; padding:0.2rem 0.5rem; font-size:0.8rem;">read signal >></button>
+                    <button class="primary" style="width:auto; padding:0.2rem 0.5rem; font-size:0.8rem;">intercept >></button>
                 </div>
             `;
             div.querySelector('.post-content').after(renderReactions(id, data.reactions, collectionName));
