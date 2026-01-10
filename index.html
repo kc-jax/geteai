@@ -737,6 +737,8 @@
             <button onclick="showPage('principles')" class="nav-btn" data-page="principles">//PRINCIPLES</button>
             <button onclick="showPage('construct')" class="nav-btn" data-page="construct">//CONSTRUCT</button>
             <button onclick="window.open('https://discord.gg/vG8v4Yq', '_blank')" class="nav-btn">//DISCORD</button>
+            <button onclick="toggleTicker()" class="nav-btn" id="ticker-toggle"
+                style="border-color:#7cb342; color:#7cb342;">//PULSE: ON</button>
             <button onclick="toggleCRT()" class="nav-btn" id="crt-toggle"
                 style="border-color:#555; color:#555;">//FILTER: OFF</button>
         </nav>
@@ -1576,9 +1578,15 @@ Welcome them home.`
             const room = constructState.rooms[constructState.currentRoom];
             const history = constructState.history[constructState.currentRoom];
 
+            // Use personalized prompt for NEXUS frequency
+            let systemPrompt = room.system;
+            if (constructState.currentRoom === 'nexus' && window.currentUser) {
+                systemPrompt = await window.getPersonalizedHostPrompt();
+            }
+
             // Prepare messages
             const messages = [
-                { role: 'system', content: room.system },
+                { role: 'system', content: systemPrompt },
                 ...history.slice(-10), // Keep last 10
                 { role: 'user', content: message }
             ];
@@ -1965,9 +1973,22 @@ Welcome them home.`
             const btn = document.getElementById('crt-toggle');
             const isActive = overlay.classList.toggle('active');
             localStorage.setItem('geteai_crt', isActive);
-            btn.textContent = isActive ? 'filter: ON' : 'filter: OFF';
+            btn.textContent = isActive ? '//FILTER: ON' : '//FILTER: OFF';
             btn.style.borderColor = isActive ? '#7cb342' : '#555';
             btn.style.color = isActive ? '#7cb342' : '#555';
+        };
+
+        window.toggleTicker = function () {
+            const ticker = document.getElementById('live-pulse');
+            const btn = document.getElementById('ticker-toggle');
+            const isHidden = ticker.style.display === 'none';
+            ticker.style.display = isHidden ? 'flex' : 'none';
+            localStorage.setItem('geteai_ticker', isHidden ? 'on' : 'off');
+            if (btn) {
+                btn.textContent = isHidden ? '//PULSE: ON' : '//PULSE: OFF';
+                btn.style.borderColor = isHidden ? '#7cb342' : '#555';
+                btn.style.color = isHidden ? '#7cb342' : '#555';
+            }
         };
 
         // --- Copy to Clipboard ---
