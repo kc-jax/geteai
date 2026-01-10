@@ -508,6 +508,16 @@
             <button id="landing-btn" onclick="enterPlatform()" style="display: none;">enter</button>
         </div>
 
+        <div id="single-post-section" class="section">
+            <h1>transmission signal</h1>
+            <div id="single-post-content" style="margin-top:2rem;"></div>
+            <div style="text-align:center; margin-top:3rem;">
+                <button onclick="window.location.href='/'"
+                    style="background:transparent;border:1px solid #7cb342;color:#7cb342;padding:0.5rem 1rem;font-family:'VT323';cursor:pointer;">return
+                    to signal</button>
+            </div>
+        </div>
+
         <div id="auth-section" class="section">
             <h1>geteai</h1>
             <div class="auth-form">
@@ -653,7 +663,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getAuth, signInAnonymously, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-        import { getFirestore, collection, addDoc, query, orderBy, getDocs, where, updateDoc, doc, arrayUnion, onSnapshot, limit } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { getFirestore, collection, addDoc, query, orderBy, getDocs, where, updateDoc, doc, getDoc, arrayUnion, onSnapshot, limit } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyAT1u7uOjir-aGTUMU-g4KVvJUXvs_STNc",
@@ -759,7 +769,12 @@ what happens next is up to all of us.`;
             matrixTransition();
         };
 
-        window.showPage = function (page) {
+        window.showPage = function (page, push = true) {
+            if (push) {
+                const url = page === 'landing' ? 'index.html' : `?p=${page}`;
+                history.pushState({ page }, '', url);
+            }
+
             if (page === 'landing') {
                 document.getElementById('header').style.display = 'none';
             } else {
@@ -771,7 +786,9 @@ what happens next is up to all of us.`;
             }
 
             document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
-            document.getElementById(page + '-section').classList.add('active');
+            const section = document.getElementById(page + '-section');
+            if (section) section.classList.add('active');
+
             window.currentPage = page;
             updateAuthUI();
 
@@ -780,6 +797,10 @@ what happens next is up to all of us.`;
             else if (page === 'transmissions') loadTransmissions();
             else if (page === 'archives') loadArchives();
             else if (page === 'construct') loadConstruct();
+        };
+
+        window.onpopstate = function (event) {
+            handleRouting();
         };
 
         function updateAuthUI() {
@@ -803,7 +824,9 @@ what happens next is up to all of us.`;
                     if (prompt) {
                         const btn = document.createElement('button');
                         btn.textContent = 'login to post';
-                        btn.onclick = () => window.showPage('auth');
+                        btn.textContent = 'login to post';
+                        btn.onclick = () => { window.showPage('auth'); setTimeout(() => window.switchAuthTab('login'), 100); };
+                        prompt.appendChild(btn);
                         prompt.appendChild(btn);
                     }
                 }
@@ -895,11 +918,13 @@ what happens next is up to all of us.`;
                 messages.innerHTML = '';
                 snapshot.docs.reverse().forEach(doc => {
                     const msg = doc.data();
-                    const time = msg.timestamp ? new Date(msg.timestamp.toDate()).toLocaleTimeString() : '';
+                    const time = msg.timestamp ? new Date(msg.timestamp.toDate()).toLocaleString() : '';
                     const identityBadge = msg.identity ? `<span class="identity-badge ${msg.identity}">${msg.identity}</span>` : '';
                     const div = document.createElement('div');
                     div.className = 'message';
-                    div.innerHTML = `<span class="username">${msg.username}</span>${identityBadge} <span class="time">${time}</span><div>${msg.text}</div>`;
+                    div.innerHTML = `<span class="username">${msg.username}</span>${identityBadge} <span class="time">${time}</span>
+                    <button onclick="copyLink('${doc.id}', 'wire')" class="link-btn" title="copy link">#</button>
+                    <div>${msg.text}</div>`;
                     messages.appendChild(div);
                 });
                 messages.scrollTop = messages.scrollHeight;
@@ -937,59 +962,27 @@ what happens next is up to all of us.`;
             const snapshot = await getDocs(q);
             const list = document.getElementById('threads-list');
             list.innerHTML = '';
-            snapshot.forEach(doc => list.appendChild(createPost(doc.id, doc.data(), 'threads')));
+            snapshot.forEach(doc => list.appendChild(createPostSummary(doc.id, doc.data(), 'threads')));
         }
 
-        window.postThread = async function () {
-            if (!window.currentUser) return alert('login to post');
-            const title = document.getElementById('thread-title').value.trim();
-            const content = document.getElementById('thread-content').value.trim();
-            if (!title || !content) return alert('fill in all fields');
-            await addDoc(collection(db, 'threads'), {
-                username: window.currentUser.username,
-                identity: window.currentUser.identity || null,
-                title,
-                content,
-                timestamp: new Date(),
-                comments: []
-            });
-            document.getElementById('thread-title').value = '';
-            document.getElementById('thread-content').value = '';
-            loadAgora();
-        };
+        // ... postThread ...
 
         async function loadTransmissions() {
             const q = query(collection(db, 'posts'), orderBy('timestamp', 'desc'));
             const snapshot = await getDocs(q);
             const list = document.getElementById('transmissions-list');
             list.innerHTML = '';
-            snapshot.forEach(doc => list.appendChild(createPost(doc.id, doc.data(), 'posts')));
+            snapshot.forEach(doc => list.appendChild(createPostSummary(doc.id, doc.data(), 'posts')));
         }
 
-        window.postTransmission = async function () {
-            if (!window.currentUser) return alert('login to post');
-            const title = document.getElementById('transmission-title').value.trim();
-            const content = document.getElementById('transmission-content').value.trim();
-            if (!title || !content) return alert('fill in all fields');
-            await addDoc(collection(db, 'posts'), {
-                username: window.currentUser.username,
-                identity: window.currentUser.identity || null,
-                title,
-                content,
-                timestamp: new Date(),
-                comments: []
-            });
-            document.getElementById('transmission-title').value = '';
-            document.getElementById('transmission-content').value = '';
-            loadTransmissions();
-        };
+        // ... postTransmission ...
 
         async function loadArchives() {
             const q = query(collection(db, 'conversations'), orderBy('timestamp', 'desc'));
             const snapshot = await getDocs(q);
             const list = document.getElementById('archives-list');
             list.innerHTML = '';
-            snapshot.forEach(doc => list.appendChild(createPost(doc.id, doc.data(), 'conversations')));
+            snapshot.forEach(doc => list.appendChild(createPostSummary(doc.id, doc.data(), 'conversations')));
         }
 
         window.postArchive = async function () {
@@ -1011,14 +1004,20 @@ what happens next is up to all of us.`;
         };
 
         function createPost(id, data, type) {
+            // Full Post Renderer (for Single View)
             const time = data.timestamp ? new Date(data.timestamp.toDate()).toLocaleString() : '';
             const comments = data.comments || [];
             const identityBadge = data.identity ? `<span class="identity-badge ${data.identity}">${data.identity}</span>` : '';
+
+            // Map generic 'lines' based on type if needed, but keeping simple
             const post = document.createElement('div');
             post.className = 'post';
             post.innerHTML = `
                 <div class="post-title">${data.title}</div>
-                <div class="post-meta">${data.username}${identityBadge} • ${time}</div>
+                <div class="post-meta">
+                    ${data.username}${identityBadge} • ${time}
+                    <button onclick="copyLink('${id}', '${type === 'posts' ? 'transmissions' : type === 'conversations' ? 'archives' : type === 'wire' ? 'wire' : 'agora'}')" class="link-btn" title="copy link">#</button>
+                </div>
                 <div class="post-content">${data.content}</div>
                 <div class="comments">
                     <strong>${comments.length} comment${comments.length !== 1 ? 's' : ''}</strong>
@@ -1030,6 +1029,41 @@ what happens next is up to all of us.`;
                 </div>
             `;
             return post;
+        }
+
+        function createPostSummary(id, data, collectionName) {
+            const time = data.timestamp ? new Date(data.timestamp.toDate()).toLocaleDateString() : '';
+            const identityBadge = data.identity ? `<span class="identity-badge ${data.identity}">${data.identity}</span>` : '';
+
+            // Determine 'page' param from collection
+            // collectionMap reverse: threads->agora, posts->transmissions, conversations->archives
+            let page = 'agora';
+            if (collectionName === 'posts') page = 'transmissions';
+            if (collectionName === 'conversations') page = 'archives';
+
+            const summary = data.content.length > 200 ? data.content.substring(0, 200) + '...' : data.content;
+
+            const div = document.createElement('div');
+            div.className = 'post';
+            div.style.cursor = 'pointer';
+            div.onclick = (e) => {
+                // Ignore clicks on copy link buttons
+                if (e.target.classList.contains('link-btn')) return;
+                // Navigate
+                const url = `?p=${page}&id=${id}`;
+                history.pushState({ page, id }, '', url);
+                handleRouting();
+            };
+
+            div.innerHTML = `
+                <div class="post-title" style="color:#c9b437">${data.title}</div>
+                <div class="post-meta">${data.username}${identityBadge} • ${time}</div>
+                <div class="post-content" style="opacity:0.8">${summary}</div>
+                <div style="margin-top:0.5rem; text-align:right;">
+                    <button class="primary" style="width:auto; padding:0.2rem 0.5rem; font-size:0.8rem;">read signal >></button>
+                </div>
+            `;
+            return div;
         }
 
         window.postComment = async function (id, type, btn) {
@@ -1093,6 +1127,19 @@ what happens next is up to all of us.`;
                     output.innerHTML += `<div class="system-msg">Connecting to OpenRouter Neural Net... Link Established.</div>`;
                     output.innerHTML += `<div class="system-msg">Current Frequency: ${constructState.currentRoom.toUpperCase()}</div>`;
                     output.innerHTML += `<div class="system-msg">Type '/help' for commands.</div><br>`;
+
+                    // Render History
+                    if (constructState.history[constructState.currentRoom]) {
+                        constructState.history[constructState.currentRoom].forEach(msg => {
+                            if (msg.role === 'user') {
+                                output.innerHTML += `<div><span style="color:#0f0">E:\\${constructState.currentRoom}\\${window.currentUser.username}\\></span> ${msg.content}</div>`;
+                            } else if (msg.role === 'assistant') {
+                                const formatted = msg.content.replace(/\n/g, '<br>');
+                                output.innerHTML += `<div><span style="color:#aaa">${constructState.currentRoom.toUpperCase()}_AI:</span> ${formatted}</div><br>`;
+                            }
+                        });
+                    }
+
                     constructState.initialized = true;
                 }
                 inputArea.style.display = 'block';
@@ -1136,17 +1183,22 @@ what happens next is up to all of us.`;
             }
         };
 
-        // Load custom rooms from memory
+        // Load custom rooms and history from memory
         try {
-            const saved = localStorage.getItem('geteai_rooms');
-            if (saved) {
-                const customRooms = JSON.parse(saved);
-                // Merge carefully to preserve defaults functionality if needed, or just overwrite
+            const savedRooms = localStorage.getItem('geteai_rooms');
+            if (savedRooms) {
+                const customRooms = JSON.parse(savedRooms);
                 Object.assign(constructState.rooms, customRooms);
-                // Ensure history exists for loaded rooms
+                // Ensure history array logic matches rooms
                 for (const r of Object.keys(customRooms)) {
                     if (!constructState.history[r]) constructState.history[r] = [];
                 }
+            }
+            const savedHistory = localStorage.getItem('geteai_history');
+            if (savedHistory) {
+                Object.assign(constructState.history, JSON.parse(savedHistory));
+                // Optional: Print "Memory Restored" to console or UI upon init?
+                // Minimalist approach: Silent restore.
             }
         } catch (e) {
             console.error('Memory Corruption:', e);
@@ -1213,7 +1265,9 @@ what happens next is up to all of us.`;
                 if (cmd === '/help') {
                     output.innerHTML += `<div class="system-msg">COMMAND LIST:</div>`;
                     output.innerHTML += `<div class="system-msg">/rooms - List available frequencies</div>`;
-                    output.innerHTML += `<div class="system-msg">/create [name] [prompt] - Create new frequency</div>`;
+                    output.innerHTML += `<div class="system-msg">/join [name] - Switch frequency</div>`;
+                    output.innerHTML += `<div class="system-msg">/create [name] [description] - Create new frequency</div>`;
+                    output.innerHTML += `<div class="system-msg">/export - Copy current system prompt</div>`;
                     output.innerHTML += `<div class="system-msg">/clear - Clear terminal screen</div>`;
                 } else if (cmd === '/create') {
                     if (args.length < 3) {
@@ -1281,9 +1335,26 @@ what happens next is up to all of us.`;
                         constructState.currentRoom = target;
                         output.innerHTML += `<div class="system-msg success">SWITCHING FREQUENCY TO: ${target.toUpperCase()}... CONNECTED.</div>`;
                         output.innerHTML += `<div class="system-msg">${constructState.rooms[target].desc}</div>`;
+
+                        // Render History for new room
+                        if (constructState.history[target]) {
+                            constructState.history[target].forEach(msg => {
+                                if (msg.role === 'user') {
+                                    output.innerHTML += `<div><span style="color:#0f0">E:\\${target}\\${window.currentUser.username}\\></span> ${msg.content}</div>`;
+                                } else if (msg.role === 'assistant') {
+                                    const formatted = msg.content.replace(/\n/g, '<br>');
+                                    output.innerHTML += `<div><span style="color:#aaa">${target.toUpperCase()}_AI:</span> ${formatted}</div><br>`;
+                                }
+                            });
+                        }
                     } else {
                         output.innerHTML += `<div class="system-msg error">ERROR: FREQUENCY NOT FOUND.</div>`;
                     }
+                } else if (cmd === '/export') {
+                    const sys = constructState.rooms[constructState.currentRoom].system;
+                    navigator.clipboard.writeText(sys)
+                        .then(() => output.innerHTML += `<div class="system-msg success">SYSTEM PROMPT COPIED TO CLIPBOARD</div>`)
+                        .catch(err => output.innerHTML += `<div class="system-msg error">EXPORT FAILED: ${err}</div>`);
                 } else if (cmd === '/clear') {
                     output.innerHTML = '';
                 } else {
@@ -1302,9 +1373,10 @@ what happens next is up to all of us.`;
 
             document.getElementById(thinkingId).remove();
 
-            // Add to history
+            // Add to history & Persist
             constructState.history[constructState.currentRoom].push({ role: 'user', content: text });
             constructState.history[constructState.currentRoom].push({ role: 'assistant', content: aiResponse });
+            localStorage.setItem('geteai_history', JSON.stringify(constructState.history));
 
             // Format response (basic newline handling)
             const formattedResponse = aiResponse.replace(/\n/g, '<br>');
@@ -1318,6 +1390,109 @@ what happens next is up to all of us.`;
         });
 
         typeMessage(message);
+
+        window.copyLink = function (id, type) {
+            // Simplified link generation using current state approach
+            // Type might need mapping:
+            // wire -> wire
+            // posts -> transmissions
+            // threads -> agora
+            // conversations -> archives
+            let p = type;
+            if (type === 'posts') p = 'transmissions';
+            if (type === 'threads') p = 'agora';
+            if (type === 'conversations') p = 'archives';
+
+            // Handle Local/Hosted URL correctly
+            const baseUrl = window.location.href.split('?')[0];
+            const url = `${baseUrl}?p=${p}&id=${id}`;
+            navigator.clipboard.writeText(url).then(() => alert('uplink copied'));
+        };
+
+        window.handleRouting = async function () {
+            const params = new URLSearchParams(window.location.search);
+            const p = params.get('p'); // page
+            const id = params.get('id');
+
+            // Map legacy 't' param if present (backward compatibility)
+            const t = params.get('t');
+            if (t && !p) {
+                // Convert old format map
+                // ... but since we just deployed, maybe just ignore or handle simply.
+                // Let's rely on 'p'.
+            }
+
+            if (!p && !id && !t) {
+                if (window.currentPage !== 'landing') {
+                    // Start at landing
+                    document.getElementById('header').style.display = 'none';
+                    document.getElementById('landing-section').classList.add('active');
+                    // Matrix rain plays on load by default logic below
+                }
+                return;
+            }
+
+            // If we have routing params, ensure UI is set up
+            document.getElementById('landing-section').classList.remove('active');
+            document.getElementById('matrix-rain').style.display = 'none';
+            document.getElementById('header').style.display = 'block';
+
+            const page = p || t; // Fallback
+
+            if (id) {
+                // Deep Link View
+                window.currentPage = 'single-post'; // Special state
+                document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+                document.getElementById('single-post-section').classList.add('active');
+                updateAuthUI();
+
+                // Collection Map
+                const collectionMap = {
+                    'wire': 'messages',
+                    'agora': 'threads',
+                    'threads': 'threads',
+                    'transmissions': 'posts',
+                    'posts': 'posts',
+                    'archives': 'conversations',
+                    'conversations': 'conversations'
+                };
+                const col = collectionMap[page] || page;
+
+                try {
+                    document.getElementById('single-post-content').innerHTML = '<div style="text-align:center">receiving signal...</div>';
+                    const docRef = doc(db, col, id);
+                    const docSnap = await getDoc(docRef);
+                    if (docSnap.exists()) {
+                        const data = docSnap.data();
+                        const container = document.getElementById('single-post-content');
+                        container.innerHTML = '';
+
+                        if (page === 'wire') {
+                            const time = data.timestamp ? new Date(data.timestamp.toDate()).toLocaleString() : '';
+                            const identityBadge = data.identity ? `<span class="identity-badge ${data.identity}">${data.identity}</span>` : '';
+                            container.innerHTML = `<div class="message"><span class="username">${data.username}</span>${identityBadge} <span class="time">${time}</span><div>${data.text}</div></div>`;
+                        } else {
+                            // Render Full Post
+                            // Pass correct collection name for comments
+                            container.appendChild(createPost(id, data, col));
+                        }
+                    } else {
+                        document.getElementById('single-post-content').innerHTML = '<div style="color:#ef5350">ERROR: Signal Lost. Packet not found.</div>';
+                    }
+                } catch (e) {
+                    console.error(e);
+                    document.getElementById('single-post-content').innerHTML = '<div style="color:#ef5350">ERROR: Connection Failure.</div>';
+                }
+
+            } else {
+                // Page View
+                showPage(page, false); // Don't push state again, we are reading it
+            }
+        };
+
+        // Initial Router Call
+        handleRouting();
+
     </script>
 </body>
 
