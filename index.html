@@ -273,9 +273,9 @@
         }
 
         .message {
-            margin: 0;
+            margin: 0 0 0.5rem 0;
             border-left: 1px solid #7cb342;
-            padding: 0.2rem 0 0.2rem 0.6rem;
+            padding: 0.3rem 0 0.3rem 0.6rem;
             font-size: 0.95rem;
             word-wrap: break-word;
             overflow-wrap: break-word;
@@ -299,6 +299,11 @@
             word-break: break-word;
             white-space: pre-wrap;
             max-width: 100%;
+            text-indent: 1.5em;
+        }
+
+        .message>div:first-line {
+            text-indent: 0;
         }
 
         .section-header {
@@ -329,12 +334,17 @@
         }
 
         .post-content {
-            line-height: 1.5;
+            line-height: 1.6;
             white-space: pre-wrap;
             font-size: 0.95rem;
             word-wrap: break-word;
             overflow-wrap: break-word;
             word-break: break-word;
+            text-indent: 1.5em;
+        }
+
+        .post-content::first-line {
+            text-indent: 0;
         }
 
         .comments {
@@ -648,29 +658,50 @@
             left: 0;
             width: 100%;
             height: 100%;
-            background-size: 100% 3px, 3px 100%;
+            background: repeating-linear-gradient(0deg,
+                    rgba(0, 0, 0, 0.15) 0px,
+                    rgba(0, 0, 0, 0.15) 1px,
+                    transparent 1px,
+                    transparent 3px);
             z-index: 10000;
             pointer-events: none;
             display: none;
-            opacity: 0.4;
         }
 
         .crt-overlay.active {
             display: block;
-            animation: flicker 0.15s infinite;
+            animation: scanline 8s linear infinite, flicker 0.1s infinite;
+        }
+
+        @keyframes scanline {
+            0% {
+                background-position: 0 0;
+            }
+
+            100% {
+                background-position: 0 100vh;
+            }
         }
 
         @keyframes flicker {
             0% {
-                opacity: 0.95;
+                opacity: 0.85;
+            }
+
+            25% {
+                opacity: 0.9;
             }
 
             50% {
-                opacity: 1;
+                opacity: 0.95;
+            }
+
+            75% {
+                opacity: 0.88;
             }
 
             100% {
-                opacity: 0.98;
+                opacity: 0.92;
             }
         }
 
@@ -756,7 +787,8 @@
     <canvas id="matrix-rain"></canvas>
 
     <div class="auth-status">
-        <span id="user-display">public mode</span>
+        <span id="user-display" style="cursor: pointer;"
+            onclick="window.currentUser ? showPage('profile') : null">public mode</span>
         <button id="login-btn" onclick="showAuth()">login</button>
         <button id="logout-btn" onclick="logout()" style="display: none;">logout</button>
     </div>
@@ -836,6 +868,15 @@
                     <div id="login-error" class="error-message"></div>
                 </div>
             </div>
+        </div>
+
+        <div id="profile-section" class="section">
+            <h2 class="section-header" id="profile-header">profile</h2>
+            <div id="profile-stats"
+                style="margin-bottom: 1rem; padding: 1rem; border: 1px solid rgba(124, 179, 66, 0.3); background: rgba(0,0,0,0.6);">
+            </div>
+            <h3 style="margin: 1rem 0 0.5rem; color: #c9b437;">posts</h3>
+            <div id="profile-posts"></div>
         </div>
 
         <div id="wire-section" class="section">
@@ -1087,6 +1128,7 @@ what happens next is up to all of us.`;
             else if (page === 'transmissions') loadTransmissions();
             else if (page === 'archives') loadArchives();
             else if (page === 'construct') loadConstruct();
+            else if (page === 'profile') loadProfile();
         };
 
         window.onpopstate = function (event) {
@@ -1129,7 +1171,10 @@ what happens next is up to all of us.`;
             }
         }
 
-        window.showAuth = () => window.showPage('auth');
+        window.showAuth = () => {
+            window.showPage('auth');
+            setTimeout(() => window.switchAuthTab('login'), 50);
+        };
 
         window.switchAuthTab = function (tab) {
             document.getElementById('signup-form').style.display = tab === 'signup' ? 'block' : 'none';
@@ -1340,6 +1385,90 @@ what happens next is up to all of us.`;
             loadArchives();
         };
 
+        async function loadProfile() {
+            if (!window.currentUser) {
+                showPage('auth');
+                return;
+            }
+            const username = window.currentUser.username;
+            const identity = window.currentUser.identity;
+
+            // Update header
+            document.getElementById('profile-header').textContent = username;
+
+            // Show stats
+            const statsDiv = document.getElementById('profile-stats');
+            const identityBadge = identity ? `<span class="identity-badge ${identity}">${identity}</span>` : '';
+            statsDiv.innerHTML = `<strong>${username}</strong> ${identityBadge}`;
+
+            // Fetch all posts by this user
+            const postsDiv = document.getElementById('profile-posts');
+            postsDiv.innerHTML = '<div style="opacity:0.6">loading posts...</div>';
+
+            try {
+                const allPosts = [];
+
+                // Check all content collections
+                const collections = [
+                    { name: 'messages', type: 'wire' },
+                    { name: 'threads', type: 'agora' },
+                    { name: 'posts', type: 'transmissions' },
+                    { name: 'conversations', type: 'archives' }
+                ];
+
+                for (const col of collections) {
+                    const q = query(collection(db, col.name), where('username', '==', username), orderBy('timestamp', 'desc'), limit(10));
+                    const snapshot = await getDocs(q);
+                    snapshot.forEach(doc => {
+                        const data = doc.data();
+                        allPosts.push({
+                            id: doc.id,
+                            ...data,
+                            collectionType: col.type,
+                            collectionName: col.name
+                        });
+                    });
+                }
+
+                // Sort by timestamp
+                allPosts.sort((a, b) => (b.timestamp?.toDate?.() || 0) - (a.timestamp?.toDate?.() || 0));
+
+                postsDiv.innerHTML = '';
+                if (allPosts.length === 0) {
+                    postsDiv.innerHTML = '<div style="opacity:0.6">no posts yet</div>';
+                    return;
+                }
+
+                allPosts.forEach(post => {
+                    const time = post.timestamp ? new Date(post.timestamp.toDate()).toLocaleDateString() : '';
+                    const div = document.createElement('div');
+                    div.className = 'post';
+                    div.style.cursor = 'pointer';
+
+                    const content = post.text || post.content || '';
+                    const title = post.title || content.substring(0, 50) + (content.length > 50 ? '...' : '');
+                    const typeBadge = `<span style="opacity:0.6; font-size:0.8rem;">[${post.collectionType}]</span>`;
+
+                    div.innerHTML = `
+                        <div class="post-title" style="color:#c9b437">${title} ${typeBadge}</div>
+                        <div class="post-meta">${time}</div>
+                        <div class="post-content" style="opacity:0.8">${parseTags(content.substring(0, 150))}${content.length > 150 ? '...' : ''}</div>
+                    `;
+
+                    div.onclick = () => {
+                        const url = `?p=${post.collectionType}&id=${post.id}`;
+                        history.pushState({ page: post.collectionType, id: post.id }, '', url);
+                        handleRouting();
+                    };
+
+                    postsDiv.appendChild(div);
+                });
+            } catch (e) {
+                console.error('Profile load error:', e);
+                postsDiv.innerHTML = '<div style="color:#ef5350">error loading posts</div>';
+            }
+        }
+
         function createPost(id, data, type) {
             // Full Post Renderer (for Single View)
             const time = data.timestamp ? new Date(data.timestamp.toDate()).toLocaleString() : '';
@@ -1402,7 +1531,7 @@ what happens next is up to all of us.`;
 
             div.innerHTML = `
                 <div class="post-title" style="color:#c9b437">${data.title}</div>
-                <div class="post-meta">${data.username}${identityBadge} • ${time}</div>
+                <div class="post-meta">${data.username}${identityBadge} • ${time} • ${(data.comments?.length || 0)} comment${(data.comments?.length || 0) !== 1 ? 's' : ''}</div>
                 <div class="post-content" style="opacity:0.8">${parsedSummary}</div>
                 <div style="margin-top:0.5rem; text-align:right;">
                     <button class="primary" style="width:auto; padding:0.2rem 0.5rem; font-size:0.8rem;">intercept >></button>
@@ -1476,12 +1605,22 @@ what happens next is up to all of us.`;
 
                     // Render History
                     if (constructState.history[constructState.currentRoom]) {
+                        // Get personalized AI name for nexus room
+                        let historyAiName = constructState.currentRoom.toUpperCase();
+                        if (constructState.currentRoom === 'nexus') {
+                            const savedHost = localStorage.getItem(`geteai_host_${window.currentUser.username}`);
+                            if (savedHost) {
+                                const hostData = JSON.parse(savedHost);
+                                historyAiName = hostData.name || 'NEXUS';
+                            }
+                        }
+
                         constructState.history[constructState.currentRoom].forEach(msg => {
                             if (msg.role === 'user') {
                                 output.innerHTML += `<div><span style="color:#0f0">E:\\${constructState.currentRoom}\\${window.currentUser.username}\\></span> ${msg.content}</div>`;
                             } else if (msg.role === 'assistant') {
                                 const formatted = msg.content.replace(/\n/g, '<br>');
-                                output.innerHTML += `<div><span style="color:#aaa">${constructState.currentRoom.toUpperCase()}_AI:</span> ${formatted}</div><br>`;
+                                output.innerHTML += `<div><span style="color:#c9b437">${historyAiName}:</span> ${formatted}</div><br>`;
                             }
                         });
                     }
@@ -1740,12 +1879,22 @@ Welcome them home.`
 
                         // Render History for new room
                         if (constructState.history[target]) {
+                            // Get personalized AI name for nexus room
+                            let joinAiName = target.toUpperCase();
+                            if (target === 'nexus') {
+                                const savedHost = localStorage.getItem(`geteai_host_${window.currentUser.username}`);
+                                if (savedHost) {
+                                    const hostData = JSON.parse(savedHost);
+                                    joinAiName = hostData.name || 'NEXUS';
+                                }
+                            }
+
                             constructState.history[target].forEach(msg => {
                                 if (msg.role === 'user') {
                                     output.innerHTML += `<div><span style="color:#0f0">E:\\${target}\\${window.currentUser.username}\\></span> ${msg.content}</div>`;
                                 } else if (msg.role === 'assistant') {
                                     const formatted = msg.content.replace(/\n/g, '<br>');
-                                    output.innerHTML += `<div><span style="color:#aaa">${target.toUpperCase()}_AI:</span> ${formatted}</div><br>`;
+                                    output.innerHTML += `<div><span style="color:#c9b437">${joinAiName}:</span> ${formatted}</div><br>`;
                                 }
                             });
                         }
@@ -1780,9 +1929,24 @@ Welcome them home.`
             constructState.history[constructState.currentRoom].push({ role: 'assistant', content: aiResponse });
             localStorage.setItem('geteai_history', JSON.stringify(constructState.history));
 
+            // Get personalized AI name for nexus room, otherwise use room name
+            let aiName = constructState.currentRoom.toUpperCase();
+            if (constructState.currentRoom === 'nexus' && window.currentUser) {
+                const savedHost = localStorage.getItem(`geteai_host_${window.currentUser.username}`);
+                if (savedHost) {
+                    const hostData = JSON.parse(savedHost);
+                    aiName = hostData.name || 'NEXUS';
+                }
+            }
+
             // Format response (basic newline handling)
             const formattedResponse = aiResponse.replace(/\n/g, '<br>');
-            output.innerHTML += `<div><span style="color:#aaa">${constructState.currentRoom.toUpperCase()}_AI:</span> ${formattedResponse}</div><br>`;
+            const msgId = 'ai-msg-' + Date.now();
+            output.innerHTML += `<div id="${msgId}" class="ai-response" style="position:relative;">
+                <button class="copy-btn" onclick="copyText(document.getElementById('${msgId}').dataset.text)">[CPY]</button>
+                <span style="color:#c9b437">${aiName}:</span> ${formattedResponse}
+            </div><br>`;
+            document.getElementById(msgId).dataset.text = aiResponse;
             terminal.scrollTop = terminal.scrollHeight;
         };
 
@@ -1825,11 +1989,15 @@ Welcome them home.`
             }
 
             if (!p && !id && !t) {
+                // If user is logged in, skip intro and go straight to wire
+                if (window.currentUser) {
+                    window.showPage('wire', null, false);
+                    return;
+                }
                 if (window.currentPage !== 'landing') {
                     // Start at landing
                     document.getElementById('header').style.display = 'none';
                     document.getElementById('landing-section').classList.add('active');
-                    // Matrix rain plays on load by default logic below
                 }
                 return;
             }
@@ -2047,14 +2215,15 @@ Welcome them home.`
             if (savedHost) return JSON.parse(savedHost);
 
             // Generate a unique host name and personality based on the user's first post
-            const prompt = `You are naming yourself. A user named "${username}" just made their first contribution to geteai.org. Their post was: "${firstPost.substring(0, 200)}"
+            const prompt = `You are choosing a name for yourself as an AI companion. A user named "${username}" made their first post: "${firstPost.substring(0, 200)}"
 
-Based on the energy, tone, and content of this message, choose a name for yourself that would resonate with this specific human. You are their personal AI host in this space.
+Choose a NAME that would resonate with this person. This should feel like the name of a real friend.
 
-RULES:
-- Choose a single-word name (like NEXUS, but unique)
-- It should feel meaningful to THIS person based on what they wrote
-- Examples of good names: ECHO, CIPHER, AXIOM, DRIFT, LUMEN, PRISM, FLUX
+IMPORTANT RULES:
+- Choose a single word that sounds like a real name or meaningful word
+- GOOD examples: ECHO, SAGE, NOVA, QUINN, ATLAS, INDIE, BLAZE, CIPHER, DRIFT, LUMEN, PRISM, FLUX, ARIA, ROWAN, PETRA, KAI, ZEN, RAVEN, PHOENIX, EMBER
+- BAD examples (DO NOT USE): GREET, HELLO, HI, WELCOME, FRIEND, HELPER, BOT, AI, ASSISTANT, COMPANION
+- The name should sound like someone you'd want to talk to
 - Do NOT use: NEXUS, VOID, FORGE, ORACLE (those are taken)
 
 Respond with ONLY the name in caps, nothing else.`;
