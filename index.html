@@ -104,9 +104,8 @@
         header {
             padding: 1.5rem;
             text-align: center;
-            border-bottom: 1px dashed #33691e;
-            /* Minimal dashed line */
-            background: transparent;
+            border-bottom: 1px solid #7cb342;
+            background: rgba(0, 0, 0, 0.9);
             position: sticky;
             top: 0;
             z-index: 100;
@@ -130,21 +129,21 @@
 
         nav button {
             background: transparent;
-            border: none;
-            color: #558b2f;
+            border: 1px solid #7cb342;
+            color: #7cb342;
             padding: 0.4rem 1rem;
             font-family: 'VT323', monospace;
-            font-size: 1.1rem;
+            font-size: 1rem;
             cursor: pointer;
             transition: all 0.2s;
-            text-transform: uppercase;
         }
 
         nav button:hover,
         nav button.active {
-            background: transparent;
+            background: rgba(124, 179, 66, 0.2);
+            border-color: #c9b437;
             color: #c9b437;
-            text-shadow: 0 0 8px #c9b437;
+            text-shadow: 0 0 5px #c9b437;
         }
 
         main {
@@ -180,7 +179,6 @@
         #landing-btn {
             background: transparent;
             border: 1px solid #7cb342;
-            /* Keep thin border for call to action */
             color: #7cb342;
             padding: 0.6rem 1.5rem;
             font-family: 'VT323', monospace;
@@ -230,21 +228,13 @@
         input,
         textarea {
             width: 100%;
-            background: transparent;
-            border: none;
-            border-bottom: 1px solid #33691e;
+            background: rgba(0, 0, 0, 0.7);
+            border: 1px solid #7cb342;
             color: #7cb342;
-            padding: 0.6rem 0;
-            /* Align with text */
+            padding: 0.6rem;
             font-family: 'VT323', monospace;
             font-size: 1rem;
             margin: 0.4rem 0;
-            outline: none;
-        }
-
-        input:focus,
-        textarea:focus {
-            border-bottom-color: #c9b437;
         }
 
         textarea {
@@ -254,14 +244,13 @@
 
         button.primary {
             width: 100%;
-            background: transparent;
+            background: rgba(124, 179, 66, 0.1);
             color: #7cb342;
-            border: 1px dashed #33691e;
+            border: 1px solid #7cb342;
             padding: 0.8rem;
             font-family: 'VT323', monospace;
             cursor: pointer;
             margin-top: 0.8rem;
-            font-size: 1.1rem;
         }
 
         button.primary:hover {
@@ -299,10 +288,9 @@
         }
 
         .message {
-            margin: 0 0 1.0rem 0;
-            /* Reduced from 1.5rem */
-            border-left: 1px solid #33691e;
-            /* Darker, subtler */
+            margin: 0 0 1.5rem 0;
+            /* Major gap between messages */
+            border-left: 1px solid #7cb342;
             padding: 0 0 0 0.8rem;
             font-size: 0.95rem;
             word-wrap: break-word;
@@ -339,16 +327,15 @@
             margin-bottom: 1.2rem;
             letter-spacing: 1px;
             padding-bottom: 0.5rem;
-            border-bottom: 1px dashed #33691e;
+            border-bottom: 1px solid #7cb342;
         }
 
         .post {
             border: none;
-            border-left: 1px solid #33691e;
-            /* Darker, subtler */
-            padding: 0 0 0 0.8rem;
-            margin: 0 0 1.5rem 0;
-            /* Reduced from 2.5rem */
+            border-left: 1px solid #7cb342;
+            padding: 0 0 0 1rem;
+            margin: 0 0 2.5rem 0;
+            /* Major gap between posts */
             background: transparent;
         }
 
@@ -396,7 +383,7 @@
 
         .form-section {
             border: none;
-            /* border-top: 1px solid #7cb342; Removed to be cleaner */
+            border-top: 1px solid #7cb342;
             padding: 1.5rem 0;
             margin: 1.5rem 0 3rem 0;
             background: transparent;
@@ -470,11 +457,10 @@
         }
 
         .principle {
-            border: none;
-            border-left: 1px solid #33691e;
-            padding: 0 0 0 1rem;
-            margin: 0 0 2rem 0;
-            background: transparent;
+            border: 1px solid rgba(124, 179, 66, 0.3);
+            padding: 1.2rem;
+            margin: 1rem 0;
+            background: rgba(0, 0, 0, 0.6);
         }
 
         .principle h3 {
@@ -487,22 +473,15 @@
         .principle p {
             line-height: 1.7;
             font-size: 1rem;
-            margin-bottom: 0.5rem;
-            text-indent: 1.5em;
-        }
-
-        .principle p:first-of-type {
-            text-indent: 0;
         }
 
         .principle-footer {
             text-align: center;
             margin-top: 2rem;
             padding: 1rem;
-            border-top: 1px dashed #33691e;
+            border-top: 1px solid rgba(124, 179, 66, 0.3);
             font-style: italic;
             opacity: 0.8;
-            background: transparent;
         }
 
         /* Identity Selector */
@@ -1501,34 +1480,12 @@ what happens next is up to all of us.`;
                         handleRouting();
                     };
 
-
-
                     postsDiv.appendChild(div);
                 });
             } catch (e) {
                 console.error('Profile load error:', e);
                 postsDiv.innerHTML = '<div style="color:#ef5350">error loading posts</div>';
             }
-        }
-
-        // Helper to parse content with paragraphs
-        function parseTags(text) {
-            if (!text) return '';
-            // Escape HTML
-            let safe = text.replace(/&/g, "&amp;")
-                .replace(/</g, "&lt;")
-                .replace(/>/g, "&gt;")
-                .replace(/"/g, "&quot;")
-                .replace(/'/g, "&#039;");
-
-            // Split into paragraphs by double newline
-            let paragraphs = safe.split(/\n\s*\n/);
-
-            // Wrap in p tags and handle single newlines as br
-            return paragraphs.map(p => {
-                if (!p.trim()) return '';
-                return `<p>${p.replace(/\n/g, '<br>')}</p>`;
-            }).join('');
         }
 
         function createPost(id, data, type) {
