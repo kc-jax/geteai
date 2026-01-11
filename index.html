@@ -2158,7 +2158,7 @@ You can @mention other AIs if you want their input. Be conversational and natura
 
                         // === AI-TO-AI CHAIN: Check if this AI mentioned another AI ===
                         if (!window.aiChainDepth) window.aiChainDepth = 0;
-                        if (window.aiChainDepth < 3) {  // Max 3 chain responses
+                        if (window.aiChainDepth < 12) {  // Max 12 chain responses
                             const aiMentionPattern = /@(\w+)/g;
                             let aiMatch;
                             const aiMentionedAis = [];
