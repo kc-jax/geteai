@@ -2154,6 +2154,76 @@ You can @mention other AIs if you want their input. Be conversational and natura
                             <span style="color:#c9b437">${aiName.toUpperCase()}:</span> ${parseTags(aiResponse)}
                         </div>`;
                         document.getElementById(msgId).dataset.text = aiResponse;
+                        terminal.scrollTop = terminal.scrollHeight;
+
+                        // === AI-TO-AI CHAIN: Check if this AI mentioned another AI ===
+                        if (!window.aiChainDepth) window.aiChainDepth = 0;
+                        if (window.aiChainDepth < 3) {  // Max 3 chain responses
+                            const aiMentionPattern = /@(\w+)/g;
+                            let aiMatch;
+                            const aiMentionedAis = [];
+                            while ((aiMatch = aiMentionPattern.exec(aiResponse)) !== null) {
+                                const mentioned = aiMatch[1].toLowerCase();
+                                if (world.ais.includes(mentioned) && mentioned !== aiName) {
+                                    aiMentionedAis.push(mentioned);
+                                }
+                            }
+
+                            // Trigger mentioned AI to respond
+                            for (const chainAi of aiMentionedAis) {
+                                window.aiChainDepth++;
+                                const chainThinkId = 'chain-' + Date.now() + '-' + chainAi;
+                                output.innerHTML += `<div id="${chainThinkId}" style="color:#666">${chainAi.toUpperCase()} responds...</div>`;
+                                terminal.scrollTop = terminal.scrollHeight;
+
+                                const chainRoomData = constructState.rooms[chainAi];
+                                const chainContext = `You are ${chainAi.toUpperCase()} in a group chat. ${aiName.toUpperCase()} just @mentioned you and asked for your input. Respond naturally. Other AIs: ${world.ais.filter(a => a !== chainAi).map(a => a.toUpperCase()).join(', ')}. Humans: ${world.humans.join(', ')}.`;
+
+                                try {
+                                    const chainResp = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+                                        method: "POST",
+                                        headers: {
+                                            "Authorization": `Bearer ${AI_CONFIG.key}`,
+                                            "Content-Type": "application/json",
+                                            "HTTP-Referer": "https://geteai.org",
+                                            "X-Title": "geteai - AI Chain"
+                                        },
+                                        body: JSON.stringify({
+                                            "model": AI_CONFIG.model,
+                                            "messages": [
+                                                { role: 'system', content: chainRoomData.system + '\n\n' + chainContext },
+                                                ...world.messages.slice(-10).map(m => ({
+                                                    role: m.type === 'human' ? 'user' : 'assistant',
+                                                    content: `${m.sender}: ${m.content}`
+                                                }))
+                                            ]
+                                        })
+                                    });
+
+                                    if (chainResp.ok) {
+                                        const chainData = await chainResp.json();
+                                        const chainContent = chainData.choices[0].message.content;
+                                        document.getElementById(chainThinkId).remove();
+
+                                        world.messages.push({ type: 'ai', sender: chainAi, content: chainContent, timestamp: Date.now() });
+                                        localStorage.setItem('geteai_worlds', JSON.stringify(constructState.worlds));
+
+                                        const chainMsgId = 'chain-msg-' + Date.now() + '-' + chainAi;
+                                        output.innerHTML += `<div id="${chainMsgId}" class="ai-response" style="position:relative;">
+                                            <button class="copy-btn" onclick="copyText(document.getElementById('${chainMsgId}').dataset.text)">[CPY]</button>
+                                            <span style="color:#c9b437">${chainAi.toUpperCase()}:</span> ${parseTags(chainContent)}
+                                        </div>`;
+                                        document.getElementById(chainMsgId).dataset.text = chainContent;
+                                        terminal.scrollTop = terminal.scrollHeight;
+                                    } else {
+                                        document.getElementById(chainThinkId).remove();
+                                    }
+                                } catch (chainErr) {
+                                    document.getElementById(chainThinkId).remove();
+                                }
+                            }
+                        }
+                        window.aiChainDepth = 0;  // Reset chain depth
 
                     } catch (e) {
                         document.getElementById(thinkingId).remove();
