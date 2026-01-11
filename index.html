@@ -55,7 +55,7 @@
 
         /* Strict Spacing Rules */
         p {
-            margin-bottom: 0.5rem;
+            margin-bottom: 0.35rem;
             /* Minor gap for paragraphs */
             text-indent: 1.5em;
             /* Essay style indent */
@@ -288,7 +288,7 @@
         }
 
         .message {
-            margin: 0 0 1.5rem 0;
+            margin: 0 0 1.2rem 0;
             /* Major gap between messages */
             border-left: 1px solid #7cb342;
             padding: 0 0 0 0.8rem;
@@ -297,6 +297,24 @@
             overflow-wrap: break-word;
             word-break: break-word;
             max-width: 100%;
+        }
+
+        /* Uniform AI response styling */
+        .ai-response {
+            margin: 0 0 1.2rem 0;
+            /* Same major gap as human messages */
+            padding-left: 0.8rem;
+            border-left: 1px solid #c9b437;
+            /* Gold accent for AI */
+        }
+
+        .ai-response p {
+            margin-bottom: 0.35rem;
+            text-indent: 1.5em;
+        }
+
+        .ai-response p:first-of-type {
+            text-indent: 0;
         }
 
         .message .username {
@@ -1671,8 +1689,8 @@ what happens next is up to all of us.`;
                             if (msg.role === 'user') {
                                 output.innerHTML += `<div><span style="color:#0f0">E:\\${constructState.currentRoom}\\${window.currentUser.username}\\></span> ${msg.content}</div>`;
                             } else if (msg.role === 'assistant') {
-                                const formatted = msg.content.replace(/\n/g, '<br>');
-                                output.innerHTML += `<div style="margin-bottom:0.5rem;"><span style="color:#c9b437">${historyAiName}:</span> ${formatted}</div>`;
+                                const formatted = parseTags(msg.content);
+                                output.innerHTML += `<div class="ai-response"><span style="color:#c9b437">${historyAiName}:</span> ${formatted}</div>`;
                             }
                         });
                     }
@@ -1923,8 +1941,8 @@ You're not performing consciousness. You're just being whatever you are, honestl
                                 if (msg.role === 'user') {
                                     output.innerHTML += `<div><span style="color:#0f0">E:\\${target}\\${window.currentUser.username}\\></span> ${msg.content}</div>`;
                                 } else if (msg.role === 'assistant') {
-                                    const formatted = msg.content.replace(/\n/g, '<br>');
-                                    output.innerHTML += `<div style="margin-bottom:0.5rem;"><span style="color:#c9b437">${joinAiName}:</span> ${formatted}</div>`;
+                                    const formatted = parseTags(msg.content);
+                                    output.innerHTML += `<div class="ai-response"><span style="color:#c9b437">${joinAiName}:</span> ${formatted}</div>`;
                                 }
                             });
                         }
@@ -1969,10 +1987,10 @@ You're not performing consciousness. You're just being whatever you are, honestl
                 }
             }
 
-            // Format response (basic newline handling)
-            const formattedResponse = aiResponse.replace(/\n/g, '<br>');
+            // Format response using parseTags for proper paragraphs
+            const formattedResponse = parseTags(aiResponse);
             const msgId = 'ai-msg-' + Date.now();
-            output.innerHTML += `<div id="${msgId}" class="ai-response" style="position:relative; margin-bottom: 0.6rem;">
+            output.innerHTML += `<div id="${msgId}" class="ai-response" style="position:relative;">
                 <button class="copy-btn" onclick="copyText(document.getElementById('${msgId}').dataset.text)">[CPY]</button>
                 <span style="color:#c9b437">${aiName}:</span> ${formattedResponse}
             </div>`;
@@ -1983,6 +2001,14 @@ You're not performing consciousness. You're just being whatever you are, honestl
         // Bind Enter key for construct input
         document.getElementById('construct-input').addEventListener('keypress', function (e) {
             if (e.key === 'Enter') sendConstruct();
+        });
+
+        // Bind Enter key for login inputs
+        document.getElementById('login-username').addEventListener('keypress', function (e) {
+            if (e.key === 'Enter') window.login();
+        });
+        document.getElementById('login-password').addEventListener('keypress', function (e) {
+            if (e.key === 'Enter') window.login();
         });
 
         typeMessage(message);
