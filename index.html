@@ -457,10 +457,11 @@
         }
 
         .principle {
-            border: 1px solid rgba(124, 179, 66, 0.3);
-            padding: 1.2rem;
-            margin: 1rem 0;
-            background: rgba(0, 0, 0, 0.6);
+            border: none;
+            border-left: 1px solid #33691e;
+            padding: 0 0 0 1rem;
+            margin: 0 0 2rem 0;
+            background: transparent;
         }
 
         .principle h3 {
@@ -473,13 +474,19 @@
         .principle p {
             line-height: 1.7;
             font-size: 1rem;
+            margin-bottom: 0.5rem;
+            text-indent: 1.5em;
+        }
+
+        .principle p:first-of-type {
+            text-indent: 0;
         }
 
         .principle-footer {
             text-align: center;
             margin-top: 2rem;
             padding: 1rem;
-            border-top: 1px solid rgba(124, 179, 66, 0.3);
+            border-top: 1px dashed #33691e;
             font-style: italic;
             opacity: 0.8;
         }
@@ -1517,6 +1524,26 @@ what happens next is up to all of us.`;
             `;
             post.querySelector('.post-content').after(renderReactions(id, data.reactions, type));
             return post;
+        }
+
+        // Helper to parse content with paragraphs
+        function parseTags(text) {
+            if (!text) return '';
+            // Escape HTML
+            let safe = text.replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+
+            // Split into paragraphs by double newline
+            let paragraphs = safe.split(/\n\s*\n/);
+
+            // Wrap in p tags and handle single newlines as br
+            return paragraphs.map(p => {
+                if (!p.trim()) return '';
+                return `<p>${p.replace(/\n/g, '<br>')}</p>`;
+            }).join('');
         }
 
         function createPostSummary(id, data, collectionName) {
