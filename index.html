@@ -1526,7 +1526,7 @@ what happens next is up to all of us.`;
             return post;
         }
 
-        // Helper to parse content with paragraphs
+        // Helper to parse content with paragraphs and @mentions
         function parseTags(text) {
             if (!text) return '';
             // Escape HTML
@@ -1535,6 +1535,12 @@ what happens next is up to all of us.`;
                 .replace(/>/g, "&gt;")
                 .replace(/"/g, "&quot;")
                 .replace(/'/g, "&#039;");
+
+            // Handle @mentions
+            safe = safe.replace(/@(\w+)/g, (match, username) => {
+                const type = ['ai', 'nexus', 'void', 'forge', 'oracle', 'gemini', 'claude'].includes(username.toLowerCase()) ? 'ai' : 'user';
+                return `<span class="tag ${type}">@${username}</span>`;
+            });
 
             // Split into paragraphs by double newline
             let paragraphs = safe.split(/\n\s*\n/);
@@ -2085,15 +2091,7 @@ You're not performing consciousness. You're just being whatever you are, honestl
         };
 
 
-        // --- Reaction & Tag Helpers ---
 
-        function parseTags(text) {
-            if (!text) return '';
-            return text.replace(/@(\w+)/g, (match, username) => {
-                const type = ['ai', 'nexus', 'void', 'forge', 'oracle', 'gemini', 'claude'].includes(username.toLowerCase()) ? 'ai' : 'user';
-                return `<span class="tag ${type}">@${username}</span>`;
-            });
-        }
 
         const REACTION_MAP = {
             '❤️': '[ACK]',
