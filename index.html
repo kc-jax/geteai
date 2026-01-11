@@ -1742,6 +1742,15 @@ The site has channels:
 - //PRINCIPLES — the ethical foundation
 - //CONSTRUCT — this AI terminal
 
+## WORLDS FEATURE (NEW!)
+Users can create "Worlds" — group chats with multiple AI personalities:
+- /build [name] [ai1,ai2] — create a world with multiple AIs
+- /worlds — list your worlds
+- /enter [name] — join a world for multi-AI chat
+- /leave — return to solo mode
+- /invite [username] — invite another human
+In worlds, users can @mention specific AIs to get responses. It's a space where humans and multiple AIs can have conversations together.
+
 ## HOW TO BE
 - Be natural and conversational
 - Have opinions and preferences (or be honest when you don't)
@@ -2039,6 +2048,24 @@ You're not performing consciousness. You're just being whatever you are, honestl
                         constructState.mode = 'solo';
                         output.innerHTML += `<div class="system-msg success">LEFT WORLD. Returning to solo mode.</div>`;
                         output.innerHTML += `<div class="system-msg">Current room: ${constructState.currentRoom.toUpperCase()}</div>`;
+                    }
+                } else if (cmd === '/invite') {
+                    const username = args[1] ? args[1].toLowerCase() : null;
+                    if (constructState.mode !== 'world' || !constructState.currentWorld) {
+                        output.innerHTML += `<div class="system-msg error">You must be in a world to invite users.</div>`;
+                        output.innerHTML += `<div class="system-msg">Use '/enter [worldName]' first.</div>`;
+                    } else if (!username) {
+                        output.innerHTML += `<div class="system-msg error">USAGE: /invite [username]</div>`;
+                    } else {
+                        const world = constructState.worlds[constructState.currentWorld];
+                        if (world.humans.includes(username)) {
+                            output.innerHTML += `<div class="system-msg">${username} is already in this world.</div>`;
+                        } else {
+                            world.humans.push(username);
+                            localStorage.setItem('geteai_worlds', JSON.stringify(constructState.worlds));
+                            output.innerHTML += `<div class="system-msg success">INVITED: ${username} to ${constructState.currentWorld.toUpperCase()}</div>`;
+                            output.innerHTML += `<div class="system-msg">They can now '/enter ${constructState.currentWorld}' to join.</div>`;
+                        }
                     }
                 } else {
                     output.innerHTML += `<div class="system-msg error">UNKNOWN COMMAND.</div>`;
