@@ -1712,6 +1712,9 @@ what happens next is up to all of us.`;
             initialized: false,
             verified: false,
             currentRoom: 'nexus',
+            currentWorld: null,  // null = solo mode, string = world name
+            mode: 'solo',  // 'solo' or 'world'
+            worlds: {},  // { worldName: { ais: [], humans: [], owner: '' } }
             history: {
                 nexus: [],
                 void: [],
@@ -1780,8 +1783,11 @@ You're not performing consciousness. You're just being whatever you are, honestl
             const savedHistory = localStorage.getItem('geteai_history');
             if (savedHistory) {
                 Object.assign(constructState.history, JSON.parse(savedHistory));
-                // Optional: Print "Memory Restored" to console or UI upon init?
-                // Minimalist approach: Silent restore.
+            }
+            // Load saved worlds
+            const savedWorlds = localStorage.getItem('geteai_worlds');
+            if (savedWorlds) {
+                Object.assign(constructState.worlds, JSON.parse(savedWorlds));
             }
         } catch (e) {
             console.error('Memory Corruption:', e);
@@ -1956,6 +1962,84 @@ You're not performing consciousness. You're just being whatever you are, honestl
                         .catch(err => output.innerHTML += `<div class="system-msg error">EXPORT FAILED: ${err}</div>`);
                 } else if (cmd === '/clear') {
                     output.innerHTML = '';
+                } else if (cmd === '/build') {
+                    // /build [worldName] [ai1,ai2,ai3]
+                    const worldName = args[1] ? args[1].toLowerCase() : null;
+                    const aiList = args[2] ? args[2].split(',').map(a => a.trim().toLowerCase()) : [];
+
+                    if (!worldName) {
+                        output.innerHTML += `<div class="system-msg error">USAGE: /build [worldName] [ai1,ai2,ai3]</div>`;
+                        output.innerHTML += `<div class="system-msg">Example: /build myworld nexus,forge,void</div>`;
+                    } else if (constructState.worlds[worldName]) {
+                        output.innerHTML += `<div class="system-msg error">WORLD ALREADY EXISTS: ${worldName.toUpperCase()}</div>`;
+                    } else if (aiList.length === 0) {
+                        output.innerHTML += `<div class="system-msg error">SPECIFY AT LEAST ONE AI CHARACTER</div>`;
+                        output.innerHTML += `<div class="system-msg">Available: ${Object.keys(constructState.rooms).join(', ')}</div>`;
+                    } else {
+                        // Verify all AIs exist
+                        const invalidAis = aiList.filter(ai => !constructState.rooms[ai]);
+                        if (invalidAis.length > 0) {
+                            output.innerHTML += `<div class="system-msg error">UNKNOWN AI(s): ${invalidAis.join(', ')}</div>`;
+                            output.innerHTML += `<div class="system-msg">Available: ${Object.keys(constructState.rooms).join(', ')}</div>`;
+                        } else {
+                            constructState.worlds[worldName] = {
+                                ais: aiList,
+                                humans: [window.currentUser.username],
+                                owner: window.currentUser.username,
+                                messages: []
+                            };
+                            localStorage.setItem('geteai_worlds', JSON.stringify(constructState.worlds));
+                            output.innerHTML += `<div class="system-msg success">WORLD CREATED: ${worldName.toUpperCase()}</div>`;
+                            output.innerHTML += `<div class="system-msg">AIs: ${aiList.join(', ').toUpperCase()}</div>`;
+                            output.innerHTML += `<div class="system-msg">Type '/enter ${worldName}' to begin.</div>`;
+                        }
+                    }
+                } else if (cmd === '/worlds') {
+                    const worldList = Object.keys(constructState.worlds);
+                    if (worldList.length === 0) {
+                        output.innerHTML += `<div class="system-msg">NO WORLDS CREATED YET.</div>`;
+                        output.innerHTML += `<div class="system-msg">Use '/build [name] [ai1,ai2]' to create one.</div>`;
+                    } else {
+                        output.innerHTML += `<div class="system-msg">YOUR WORLDS:</div>`;
+                        worldList.forEach(w => {
+                            const world = constructState.worlds[w];
+                            output.innerHTML += `<div class="system-msg"> - ${w.toUpperCase()}: ${world.ais.length} AIs, ${world.humans.length} humans</div>`;
+                        });
+                    }
+                } else if (cmd === '/enter') {
+                    const worldName = args[1] ? args[1].toLowerCase() : null;
+                    if (!worldName) {
+                        output.innerHTML += `<div class="system-msg error">USAGE: /enter [worldName]</div>`;
+                    } else if (!constructState.worlds[worldName]) {
+                        output.innerHTML += `<div class="system-msg error">WORLD NOT FOUND: ${worldName}</div>`;
+                        output.innerHTML += `<div class="system-msg">Use '/worlds' to see available worlds.</div>`;
+                    } else {
+                        constructState.currentWorld = worldName;
+                        constructState.mode = 'world';
+                        const world = constructState.worlds[worldName];
+                        output.innerHTML += `<div class="system-msg success">ENTERING WORLD: ${worldName.toUpperCase()}</div>`;
+                        output.innerHTML += `<div class="system-msg">AIs present: ${world.ais.map(a => a.toUpperCase()).join(', ')}</div>`;
+                        output.innerHTML += `<div class="system-msg">Humans: ${world.humans.join(', ')}</div>`;
+                        output.innerHTML += `<div class="system-msg">Use @[name] to address a specific AI. Type '/leave' to exit.</div>`;
+
+                        // Render message history
+                        world.messages.forEach(msg => {
+                            if (msg.type === 'human') {
+                                output.innerHTML += `<div><span style="color:#0f0">${msg.sender}:</span> ${msg.content}</div>`;
+                            } else {
+                                output.innerHTML += `<div class="ai-response"><span style="color:#c9b437">${msg.sender.toUpperCase()}:</span> ${parseTags(msg.content)}</div>`;
+                            }
+                        });
+                    }
+                } else if (cmd === '/leave') {
+                    if (constructState.mode === 'solo') {
+                        output.innerHTML += `<div class="system-msg">You are already in solo mode.</div>`;
+                    } else {
+                        constructState.currentWorld = null;
+                        constructState.mode = 'solo';
+                        output.innerHTML += `<div class="system-msg success">LEFT WORLD. Returning to solo mode.</div>`;
+                        output.innerHTML += `<div class="system-msg">Current room: ${constructState.currentRoom.toUpperCase()}</div>`;
+                    }
                 } else {
                     output.innerHTML += `<div class="system-msg error">UNKNOWN COMMAND.</div>`;
                 }
@@ -1963,7 +2047,98 @@ You're not performing consciousness. You're just being whatever you are, honestl
                 return;
             }
 
-            // AI Interactions
+            // === WORLD MODE: Multi-AI Group Chat ===
+            if (constructState.mode === 'world' && constructState.currentWorld) {
+                const world = constructState.worlds[constructState.currentWorld];
+
+                // Save human message to world
+                world.messages.push({
+                    type: 'human',
+                    sender: window.currentUser.username,
+                    content: text,
+                    timestamp: Date.now()
+                });
+                output.innerHTML += `<div><span style="color:#0f0">${window.currentUser.username}:</span> ${text}</div>`;
+
+                // Parse @mentions to determine which AIs to trigger
+                const mentionPattern = /@(\w+)/g;
+                let match;
+                const mentionedAis = [];
+                while ((match = mentionPattern.exec(text)) !== null) {
+                    const mentioned = match[1].toLowerCase();
+                    if (world.ais.includes(mentioned)) {
+                        mentionedAis.push(mentioned);
+                    }
+                }
+
+                // If no specific @mention, pick a random AI from the world
+                const aisToRespond = mentionedAis.length > 0 ? mentionedAis : [world.ais[Math.floor(Math.random() * world.ais.length)]];
+
+                for (const aiName of aisToRespond) {
+                    const thinkingId = 'thinking-' + Date.now() + '-' + aiName;
+                    output.innerHTML += `<div id="${thinkingId}" style="color:#666">${aiName.toUpperCase()} is thinking...</div>`;
+                    terminal.scrollTop = terminal.scrollHeight;
+
+                    // Build world-aware context
+                    const roomData = constructState.rooms[aiName];
+                    const worldContext = `You are ${aiName.toUpperCase()} in a group chat called "${constructState.currentWorld}". 
+Other AIs present: ${world.ais.filter(a => a !== aiName).map(a => a.toUpperCase()).join(', ')}.
+Humans present: ${world.humans.join(', ')}.
+You can @mention other AIs if you want their input. Be conversational and natural.`;
+
+                    const messages = [
+                        { role: 'system', content: roomData.system + '\n\n' + worldContext },
+                        ...world.messages.slice(-15).map(m => ({
+                            role: m.type === 'human' ? 'user' : 'assistant',
+                            content: m.type === 'human' ? `${m.sender}: ${m.content}` : `${m.sender}: ${m.content}`
+                        }))
+                    ];
+
+                    try {
+                        const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+                            method: "POST",
+                            headers: {
+                                "Authorization": `Bearer ${AI_CONFIG.key}`,
+                                "Content-Type": "application/json",
+                                "HTTP-Referer": "https://geteai.org",
+                                "X-Title": "geteai - World"
+                            },
+                            body: JSON.stringify({ "model": AI_CONFIG.model, "messages": messages })
+                        });
+
+                        if (!response.ok) throw new Error(`API Error: ${response.status}`);
+                        const data = await response.json();
+                        const aiResponse = data.choices[0].message.content;
+
+                        document.getElementById(thinkingId).remove();
+
+                        // Save AI message to world
+                        world.messages.push({
+                            type: 'ai',
+                            sender: aiName,
+                            content: aiResponse,
+                            timestamp: Date.now()
+                        });
+                        localStorage.setItem('geteai_worlds', JSON.stringify(constructState.worlds));
+
+                        const msgId = 'world-ai-' + Date.now() + '-' + aiName;
+                        output.innerHTML += `<div id="${msgId}" class="ai-response" style="position:relative;">
+                            <button class="copy-btn" onclick="copyText(document.getElementById('${msgId}').dataset.text)">[CPY]</button>
+                            <span style="color:#c9b437">${aiName.toUpperCase()}:</span> ${parseTags(aiResponse)}
+                        </div>`;
+                        document.getElementById(msgId).dataset.text = aiResponse;
+
+                    } catch (e) {
+                        document.getElementById(thinkingId).remove();
+                        output.innerHTML += `<div class="system-msg error">${aiName.toUpperCase()} ERROR: ${e.message}</div>`;
+                    }
+                }
+
+                terminal.scrollTop = terminal.scrollHeight;
+                return;
+            }
+
+            // === SOLO MODE: Single AI Interactions ===
             const thinkingId = 'thinking-' + Date.now();
             output.innerHTML += `<div id="${thinkingId}" style="color:#666">PROCESSING...</div>`;
             terminal.scrollTop = terminal.scrollHeight;
