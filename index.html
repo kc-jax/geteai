@@ -53,6 +53,19 @@
             overflow-x: hidden;
         }
 
+        /* Strict Spacing Rules */
+        p {
+            margin-bottom: 0.5rem;
+            /* Minor gap for paragraphs */
+            text-indent: 1.5em;
+            /* Essay style indent */
+            line-height: 1.6;
+        }
+
+        p:first-of-type {
+            text-indent: 0;
+        }
+
         body::before {
             content: "";
             position: fixed;
@@ -181,11 +194,13 @@
         }
 
         .auth-form {
-            border: 1px solid #7cb342;
-            padding: 1.5rem;
+            border: none;
+            border-left: 1px solid #7cb342;
+            /* Minimal left border only */
+            padding: 1.5rem 0 1.5rem 1rem;
             max-width: 400px;
             margin: 3rem auto;
-            background: rgba(0, 0, 0, 0.5);
+            background: transparent;
         }
 
         .auth-tabs {
@@ -254,8 +269,8 @@
             height: 350px;
             overflow-y: auto;
             overflow-x: hidden;
-            border: 1px solid #7cb342;
-            padding: 0.8rem;
+            border: none;
+            padding: 0.8rem 0;
             margin-bottom: 0.8rem;
             background: rgba(0, 0, 0, 0.7);
         }
@@ -273,9 +288,10 @@
         }
 
         .message {
-            margin: 0 0 0.5rem 0;
+            margin: 0 0 1.5rem 0;
+            /* Major gap between messages */
             border-left: 1px solid #7cb342;
-            padding: 0.3rem 0 0.3rem 0.6rem;
+            padding: 0 0 0 0.8rem;
             font-size: 0.95rem;
             word-wrap: break-word;
             overflow-wrap: break-word;
@@ -315,10 +331,12 @@
         }
 
         .post {
-            border: 1px solid #7cb342;
-            padding: 1rem;
-            margin: 0.8rem 0;
-            background: rgba(0, 0, 0, 0.6);
+            border: none;
+            border-left: 1px solid #7cb342;
+            padding: 0 0 0 1rem;
+            margin: 0 0 2.5rem 0;
+            /* Major gap between posts */
+            background: transparent;
         }
 
         .post-title {
@@ -364,10 +382,11 @@
         }
 
         .form-section {
-            border: 1px solid #7cb342;
-            padding: 1.2rem;
-            margin: 1.2rem 0;
-            background: rgba(0, 0, 0, 0.6);
+            border: none;
+            border-top: 1px solid #7cb342;
+            padding: 1.5rem 0;
+            margin: 1.5rem 0 3rem 0;
+            background: transparent;
         }
 
         .form-section h3 {
