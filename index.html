@@ -1047,6 +1047,94 @@
         const auth = getAuth(app);
         const db = getFirestore(app);
 
+        // === FIRESTORE HELPER FUNCTIONS ===
+
+        // Save user's construct data (rooms, history, hostName) to Firestore
+        async function saveUserConstructData(username) {
+            if (!username) return;
+            try {
+                const userDocRef = doc(db, 'users', username);
+                await updateDoc(userDocRef, {
+                    constructRooms: constructState.rooms,
+                    constructHistory: constructState.history
+                }).catch(async () => {
+                    // Document may not exist, use setDoc with merge
+                    const { setDoc } = await import("https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js");
+                    await setDoc(userDocRef, {
+                        constructRooms: constructState.rooms,
+                        constructHistory: constructState.history
+                    }, { merge: true });
+                });
+            } catch (e) {
+                console.error('Error saving construct data:', e);
+            }
+        }
+
+        // Load user's construct data from Firestore
+        async function loadUserConstructData(username) {
+            if (!username) return;
+            try {
+                const userDocRef = doc(db, 'users', username);
+                const userDoc = await getDoc(userDocRef);
+                if (userDoc.exists()) {
+                    const data = userDoc.data();
+                    if (data.constructRooms) {
+                        Object.assign(constructState.rooms, data.constructRooms);
+                        for (const r of Object.keys(data.constructRooms)) {
+                            if (!constructState.history[r]) constructState.history[r] = [];
+                        }
+                    }
+                    if (data.constructHistory) {
+                        Object.assign(constructState.history, data.constructHistory);
+                    }
+                    if (data.hostName) {
+                        window.personalizedHostName = data.hostName;
+                    }
+                }
+            } catch (e) {
+                console.error('Error loading construct data:', e);
+            }
+        }
+
+        // Save a world to Firestore (shared collection for multi-user access)
+        async function saveWorld(worldName) {
+            if (!worldName || !constructState.worlds[worldName]) return;
+            try {
+                const world = constructState.worlds[worldName];
+                const worldDocRef = doc(db, 'worlds', worldName);
+                const { setDoc } = await import("https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js");
+                await setDoc(worldDocRef, {
+                    name: worldName,
+                    owner: world.owner,
+                    ais: world.ais,
+                    humans: world.humans,
+                    messages: world.messages
+                });
+            } catch (e) {
+                console.error('Error saving world:', e);
+            }
+        }
+
+        // Load all worlds where user has access (is in humans array)
+        async function loadUserWorlds(username) {
+            if (!username) return;
+            try {
+                const worldsQuery = query(collection(db, 'worlds'), where('humans', 'array-contains', username));
+                const querySnapshot = await getDocs(worldsQuery);
+                querySnapshot.forEach((worldDoc) => {
+                    const data = worldDoc.data();
+                    constructState.worlds[data.name] = {
+                        owner: data.owner,
+                        ais: data.ais,
+                        humans: data.humans,
+                        messages: data.messages || []
+                    };
+                });
+            } catch (e) {
+                console.error('Error loading worlds:', e);
+            }
+        }
+
         window.currentUser = null;
         window.currentPage = 'landing';
 
@@ -1263,6 +1351,9 @@ what happens next is up to all of us.`;
                 });
                 window.currentUser = { uid: userCredential.user.uid, username, identity };
                 localStorage.setItem('geteai_session', JSON.stringify(window.currentUser));
+                // Load any initial user data (usually empty for new users)
+                await loadUserConstructData(username);
+                await loadUserWorlds(username);
                 window.showPage('wire');
             } catch (error) { errorDiv.textContent = 'signup failed'; }
         };
@@ -1289,6 +1380,9 @@ what happens next is up to all of us.`;
                 };
                 // Persist Session
                 localStorage.setItem('geteai_session', JSON.stringify(window.currentUser));
+                // Load user's construct data and worlds from Firestore
+                await loadUserConstructData(username);
+                await loadUserWorlds(username);
                 window.showPage('wire');
             } catch (error) { errorDiv.textContent = 'login failed'; }
         };
@@ -1918,8 +2012,8 @@ You're not performing consciousness. You're just being whatever you are, honestl
                             };
                             constructState.history[name] = [];
 
-                            // Persist
-                            localStorage.setItem('geteai_rooms', JSON.stringify(constructState.rooms));
+                            // Persist to Firestore
+                            await saveUserConstructData(window.currentUser.username);
 
                             output.innerHTML += `<div class="system-msg success">FREQUENCY CREATED: ${name.toUpperCase()}</div>`;
                             output.innerHTML += `<div class="system-msg">Type '/join ${name}' to enter.</div>`;
@@ -1997,7 +2091,7 @@ You're not performing consciousness. You're just being whatever you are, honestl
                                 owner: window.currentUser.username,
                                 messages: []
                             };
-                            localStorage.setItem('geteai_worlds', JSON.stringify(constructState.worlds));
+                            await saveWorld(worldName);
                             output.innerHTML += `<div class="system-msg success">WORLD CREATED: ${worldName.toUpperCase()}</div>`;
                             output.innerHTML += `<div class="system-msg">AIs: ${aiList.join(', ').toUpperCase()}</div>`;
                             output.innerHTML += `<div class="system-msg">Type '/enter ${worldName}' to begin.</div>`;
@@ -2062,7 +2156,7 @@ You're not performing consciousness. You're just being whatever you are, honestl
                             output.innerHTML += `<div class="system-msg">${username} is already in this world.</div>`;
                         } else {
                             world.humans.push(username);
-                            localStorage.setItem('geteai_worlds', JSON.stringify(constructState.worlds));
+                            await saveWorld(constructState.currentWorld);
                             output.innerHTML += `<div class="system-msg success">INVITED: ${username} to ${constructState.currentWorld.toUpperCase()}</div>`;
                             output.innerHTML += `<div class="system-msg">They can now '/enter ${constructState.currentWorld}' to join.</div>`;
                         }
@@ -2146,7 +2240,7 @@ You can @mention other AIs if you want their input. Be conversational and natura
                             content: aiResponse,
                             timestamp: Date.now()
                         });
-                        localStorage.setItem('geteai_worlds', JSON.stringify(constructState.worlds));
+                        await saveWorld(constructState.currentWorld);
 
                         const msgId = 'world-ai-' + Date.now() + '-' + aiName;
                         output.innerHTML += `<div id="${msgId}" class="ai-response" style="position:relative;">
@@ -2206,7 +2300,7 @@ You can @mention other AIs if you want their input. Be conversational and natura
                                         document.getElementById(chainThinkId).remove();
 
                                         world.messages.push({ type: 'ai', sender: chainAi, content: chainContent, timestamp: Date.now() });
-                                        localStorage.setItem('geteai_worlds', JSON.stringify(constructState.worlds));
+                                        await saveWorld(constructState.currentWorld);
 
                                         const chainMsgId = 'chain-msg-' + Date.now() + '-' + chainAi;
                                         output.innerHTML += `<div id="${chainMsgId}" class="ai-response" style="position:relative;">
@@ -2621,10 +2715,13 @@ Respond with ONLY the name in caps, nothing else.`;
             );
         };
 
-        function initSession() {
+        async function initSession() {
             const session = localStorage.getItem('geteai_session');
             if (session) {
                 window.currentUser = JSON.parse(session);
+                // Load user's construct data and worlds from Firestore
+                await loadUserConstructData(window.currentUser.username);
+                await loadUserWorlds(window.currentUser.username);
                 updateAuthUI();
             }
             const crt = localStorage.getItem('geteai_crt');
