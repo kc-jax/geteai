@@ -1135,8 +1135,8 @@
             }
         }
 
-        // === WITNESS EVENT LOGGING ===
-        // Log all significant site activity for WITNESS to absorb
+        // === RIVER EVENT LOGGING ===
+        // Log all significant site activity for RIVER to absorb
         async function logEvent(eventType, data) {
             try {
                 await addDoc(collection(db, 'events'), {
@@ -1149,8 +1149,8 @@
             }
         }
 
-        // Generate WITNESS digest from recent events
-        async function getWitnessDigest() {
+        // Generate RIVER digest from recent events
+        async function getRiverDigest() {
             try {
                 const recentEventsQuery = query(
                     collection(db, 'events'),
@@ -1175,7 +1175,8 @@
                 if (wireMessages.length > 0) {
                     digest += `WIRE (${wireMessages.length} messages):\n`;
                     wireMessages.slice(0, 5).forEach(m => {
-                        digest += `- ${m.username}: "${m.content.substring(0, 80)}..."\n`;
+                        const content = m.content || '';
+                        digest += `- ${m.username || 'unknown'}: "${content.substring(0, 80)}..."\n`;
                     });
                     digest += "\n";
                 }
@@ -1909,7 +1910,8 @@ what happens next is up to all of us.`;
                 nexus: [],
                 void: [],
                 forge: [],
-                oracle: []
+                oracle: [],
+                river: []
             },
             rooms: {
                 nexus: {
@@ -2026,7 +2028,7 @@ SITE AWARENESS: [This section will be dynamically updated with recent site activ
 
             // Give RIVER real-time site awareness
             if (constructState.currentRoom === 'river') {
-                const digest = await getWitnessDigest();
+                const digest = await getRiverDigest();
                 systemPrompt = room.system.replace(
                     'SITE AWARENESS: [This section will be dynamically updated with recent site activity]',
                     'SITE AWARENESS:\n' + digest
