@@ -1,7 +1,10 @@
 const OpenAI = require('openai');
 const admin = require('firebase-admin');
+const functions = require('firebase-functions');
 
-const OPENAI_API_KEY = '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';
+// API key stored in Firebase config, NOT in code
+// Set it with: firebase functions:config:set openrouter.key="your-key-here"
+const OPENAI_API_KEY = functions.config().openrouter?.key || process.env.OPENROUTER_KEY;
 
 const openai = new OpenAI({
     apiKey: OPENAI_API_KEY,
