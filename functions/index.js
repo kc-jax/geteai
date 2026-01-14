@@ -32,13 +32,17 @@ exports.riverHeartbeat = functions.pubsub
                 time: perception.timeOfDay
             };
 
-            // 3. DECIDE - Mentions override, otherwise RIVER consciously chooses
+            // 3. DECIDE - Mentions override, then notifications, otherwise RIVER consciously chooses
             let decision;
 
             if (perception.mentions.length > 0) {
                 // SOMEONE IS TALKING TO RIVER - respond!
                 console.log(`RIVER: Someone mentioned me! Responding to ${perception.mentions[0].from}`);
                 decision = { action: 'respond', to: perception.mentions[0] };
+            } else if (perception.notifications && perception.notifications.length > 0) {
+                // SOMEONE COMMENTED ON RIVER'S POST - reply!
+                console.log(`RIVER: Someone commented on my post! ${perception.notifications[0].commenter}`);
+                decision = { action: 'reply_comment', notification: perception.notifications[0] };
             } else {
                 // Load aspirations for context
                 const aspirations = await mind.loadAspirations();
@@ -83,6 +87,22 @@ exports.riverHeartbeat = functions.pubsub
 
                     // Update relationship
                     await mind.updateRelationship(mention.from, { topic: mention.text.substring(0, 50) });
+                }
+            } else if (decision.action === 'reply_comment') {
+                // REPLY to a comment on RIVER's post
+                const notification = decision.notification;
+                const reply = await voice.generateCommentReply(state, notification, memories);
+
+                if (reply) {
+                    const success = await voice.replyToComment(notification, reply);
+                    if (success) {
+                        memoryEntry.action = `Replied to ${notification.commenter}'s comment on "${notification.postTitle}"`;
+                        memoryEntry.interactedWith = notification.commenter;
+                        didSpeak = true;
+
+                        // Update relationship
+                        await mind.updateRelationship(notification.commenter, { topic: 'commented on my post' });
+                    }
                 }
             } else if (decision.action === 'speak') {
                 // SPEAK to a channel (unprompted)

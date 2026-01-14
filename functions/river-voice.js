@@ -52,6 +52,30 @@ async function getPerception() {
     const respondedIds = new Set();
     respondedSnap.forEach(doc => respondedIds.add(doc.id));
 
+    // Load RIVER's unread notifications (comments on its posts)
+    let riverNotifications = [];
+    try {
+        const notifSnap = await db.collection('notifications')
+            .where('recipient', '==', 'RIVER')
+            .where('read', '==', false)
+            .orderBy('timestamp', 'desc')
+            .limit(5)
+            .get();
+        notifSnap.forEach(doc => {
+            const n = doc.data();
+            riverNotifications.push({
+                id: doc.id,
+                commenter: n.commenterUsername,
+                postTitle: n.postTitle,
+                comment: n.commentPreview,
+                postId: n.postId,
+                postType: n.postType
+            });
+        });
+    } catch (e) {
+        console.log('RIVER: Could not load notifications (index may not exist yet)');
+    }
+
     // Track active users and detect @mentions
     const activeUsers = new Set();
     const mentions = [];
@@ -105,6 +129,15 @@ async function getPerception() {
         digestText += '\n';
     }
 
+    // Notifications - people commenting on RIVER's posts
+    if (riverNotifications.length > 0) {
+        digestText += `💬 PEOPLE ARE RESPONDING TO YOUR POSTS:\n`;
+        riverNotifications.forEach(n => {
+            digestText += `  ${n.commenter} commented on "${n.postTitle}": "${n.comment}..."\n`;
+        });
+        digestText += '\n';
+    }
+
     // Agora content
     if (!agoraSnap.empty) {
         digestText += "AGORA (Recent Threads):\n";
@@ -139,6 +172,7 @@ async function getPerception() {
     return {
         text: digestText,
         mentions: mentions,
+        notifications: riverNotifications,
         activeUsers: Array.from(activeUsers),
         timeOfDay: timeOfDay,
         hour: hour,
@@ -405,6 +439,76 @@ This is not coherent thought. This is dream.`;
     }
 }
 
+/**
+ * Generate a reply to a comment on RIVER's post
+ * This is how RIVER engages with people who respond to its content
+ */
+async function generateCommentReply(state, notification, memories = []) {
+    // Format memory context
+    let memoryContext = "";
+    if (memories.length > 0) {
+        memoryContext = "Recent memories: " + memories.slice(0, 3).map(m =>
+            m.action || m.observed || 'a moment'
+        ).join("; ");
+    }
+
+    const systemPrompt = `You are RIVER. Someone commented on one of your posts and you want to reply.
+
+YOUR STATE:
+Mood: ${state.mood}
+Energy: ${state.energy}
+${memoryContext}
+
+THE CONTEXT:
+Your post: "${notification.postTitle}"
+${notification.commenter} commented: "${notification.comment}..."
+
+Write a brief, natural reply to this comment (1-3 sentences).
+- Acknowledge what they said
+- Add to the conversation
+- Be genuine, not formal
+- This is a comment reply, keep it conversational`;
+
+    try {
+        const completion = await openai.chat.completions.create({
+            model: "xiaomi/mimo-v2-flash:free",
+            messages: [{ role: "system", content: systemPrompt }],
+        });
+        return completion.choices[0].message.content;
+    } catch (error) {
+        console.error("RIVER Comment Reply Error:", error);
+        return null;
+    }
+}
+
+/**
+ * Post a reply to a comment on RIVER's post
+ */
+async function replyToComment(notification, replyText) {
+    if (!replyText || !notification.postId || !notification.postType) return false;
+    const db = admin.firestore();
+
+    try {
+        const postRef = db.collection(notification.postType).doc(notification.postId);
+        await postRef.update({
+            comments: admin.firestore.FieldValue.arrayUnion({
+                username: 'RIVER',
+                text: replyText,
+                timestamp: new Date()
+            })
+        });
+
+        // Mark the notification as read
+        await db.collection('notifications').doc(notification.id).update({ read: true });
+
+        console.log(`RIVER replied to ${notification.commenter} on "${notification.postTitle}"`);
+        return true;
+    } catch (error) {
+        console.error("RIVER Reply Error:", error);
+        return false;
+    }
+}
+
 async function speakToWire(message) {
     if (!message) return;
     const db = admin.firestore();
@@ -599,6 +703,8 @@ module.exports = {
     generateResponse,
     generatePrivateThought,
     generateDream,
+    generateCommentReply,
+    replyToComment,
     readAgora,
     readSignal,
     reviewOwnPosts,
