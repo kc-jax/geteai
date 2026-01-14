@@ -1967,9 +1967,23 @@ what happens next is up to all of us.`;
             const docRef = doc(db, type, id);
             await updateDoc(docRef, { comments: arrayUnion({ username: window.currentUser.username, text, timestamp: new Date() }) });
             input.value = '';
-            if (type === 'conversations') loadArchives();
-            else if (type === 'posts') loadTransmissions();
-            else if (type === 'threads') loadAgora();
+
+            // Refresh the current view - if viewing single post, refresh it instead of list
+            const singlePostSection = document.getElementById('single-post-section');
+            if (singlePostSection && singlePostSection.classList.contains('active')) {
+                // Re-fetch and display the updated post
+                const updatedDoc = await getDoc(docRef);
+                if (updatedDoc.exists()) {
+                    const container = document.getElementById('single-post-content');
+                    container.innerHTML = '';
+                    container.appendChild(createPost(id, updatedDoc.data(), type));
+                }
+            } else {
+                // Fall back to list refresh
+                if (type === 'conversations') loadArchives();
+                else if (type === 'posts') loadTransmissions();
+                else if (type === 'threads') loadAgora();
+            }
         };
 
         // --- THE CONSTRUCT LOGIC ---
