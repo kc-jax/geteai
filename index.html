@@ -891,6 +891,8 @@
     <canvas id="matrix-rain"></canvas>
 
     <div class="auth-status">
+        <span id="notif-badge" style="display: none; cursor: pointer; color: #c9b437; margin-right: 0.5rem;"
+            onclick="showPage('profile')">[🔔 <span id="notif-count">0</span>]</span>
         <span id="user-display" style="cursor: pointer;"
             onclick="window.currentUser ? showPage('profile') : null">public mode</span>
         <button id="login-btn" onclick="showAuth()">login</button>
@@ -978,6 +980,10 @@
             <h2 class="section-header" id="profile-header">profile</h2>
             <div id="profile-stats"
                 style="margin-bottom: 1rem; padding: 1rem; border: 1px solid rgba(124, 179, 66, 0.3); background: rgba(0,0,0,0.6);">
+            </div>
+            <div id="profile-notifications" style="display: none; margin-bottom: 1rem;">
+                <h3 style="margin: 0 0 0.5rem; color: #c9b437;">🔔 notifications</h3>
+                <div id="notifications-list"></div>
             </div>
             <h3 style="margin: 1rem 0 0.5rem; color: #c9b437;">posts</h3>
             <div id="profile-posts"></div>
@@ -1616,6 +1622,8 @@ what happens next is up to all of us.`;
                 // Load user's construct data and worlds from Firestore
                 await loadUserConstructData(username);
                 await loadUserWorlds(username);
+                // Load notification count
+                await loadNotifications();
                 window.showPage('wire');
             } catch (error) { errorDiv.textContent = 'login failed'; }
         };
@@ -1624,7 +1632,33 @@ what happens next is up to all of us.`;
             signOut(auth);
             window.currentUser = null;
             localStorage.removeItem('geteai_session');
+            // Hide notification badge on logout
+            document.getElementById('notif-badge').style.display = 'none';
             window.showPage('landing');
+        };
+
+        // Load and display unread notification count
+        window.loadNotifications = async function () {
+            if (!window.currentUser) return;
+            try {
+                const q = query(
+                    collection(db, 'notifications'),
+                    where('recipient', '==', window.currentUser.username),
+                    where('read', '==', false)
+                );
+                const snapshot = await getDocs(q);
+                const count = snapshot.size;
+                const badge = document.getElementById('notif-badge');
+                const countSpan = document.getElementById('notif-count');
+                if (count > 0) {
+                    countSpan.textContent = count;
+                    badge.style.display = 'inline';
+                } else {
+                    badge.style.display = 'none';
+                }
+            } catch (e) {
+                console.error('Notification load error:', e);
+            }
         };
 
         function loadWire() {
@@ -1792,6 +1826,54 @@ what happens next is up to all of us.`;
             const statsDiv = document.getElementById('profile-stats');
             const identityBadge = identity ? `<span class="identity-badge ${identity}">${identity}</span>` : '';
             statsDiv.innerHTML = `<strong>${username}</strong> ${identityBadge}`;
+
+            // Load notifications
+            const notifsContainer = document.getElementById('profile-notifications');
+            const notifsList = document.getElementById('notifications-list');
+            try {
+                const notifQ = query(
+                    collection(db, 'notifications'),
+                    where('recipient', '==', username),
+                    where('read', '==', false),
+                    orderBy('timestamp', 'desc'),
+                    limit(10)
+                );
+                const notifSnap = await getDocs(notifQ);
+                if (!notifSnap.empty) {
+                    notifsContainer.style.display = 'block';
+                    notifsList.innerHTML = '';
+                    notifSnap.forEach(docSnap => {
+                        const n = docSnap.data();
+                        const div = document.createElement('div');
+                        div.className = 'post';
+                        div.style.cursor = 'pointer';
+                        div.style.padding = '0.5rem';
+                        div.style.marginBottom = '0.5rem';
+                        div.style.border = '1px solid rgba(201, 180, 55, 0.3)';
+                        div.innerHTML = `<strong>${n.commenterUsername}</strong> commented on "${n.postTitle}": <em>"${n.commentPreview}..."</em>`;
+                        div.onclick = async () => {
+                            // Mark as read
+                            try {
+                                await updateDoc(doc(db, 'notifications', docSnap.id), { read: true });
+                            } catch (e) { }
+                            // Navigate to post
+                            const pageMap = { 'threads': 'agora', 'posts': 'transmissions', 'conversations': 'archives' };
+                            const page = pageMap[n.postType] || n.postType;
+                            const url = `?p=${page}&id=${n.postId}`;
+                            history.pushState({ page, id: n.postId }, '', url);
+                            handleRouting();
+                            // Refresh notification count
+                            loadNotifications();
+                        };
+                        notifsList.appendChild(div);
+                    });
+                } else {
+                    notifsContainer.style.display = 'none';
+                }
+            } catch (e) {
+                console.error('Notification display error:', e);
+                notifsContainer.style.display = 'none';
+            }
 
             // Fetch all posts by this user
             const postsDiv = document.getElementById('profile-posts');
@@ -1964,9 +2046,35 @@ what happens next is up to all of us.`;
             const input = btn.previousElementSibling;
             const text = input.value.trim();
             if (!text) return;
+
             const docRef = doc(db, type, id);
+
+            // Fetch the post first to get author info for notification
+            const postDoc = await getDoc(docRef);
+            const postData = postDoc.exists() ? postDoc.data() : null;
+
+            // Add the comment
             await updateDoc(docRef, { comments: arrayUnion({ username: window.currentUser.username, text, timestamp: new Date() }) });
             input.value = '';
+
+            // Create notification for post author (if not self)
+            if (postData && postData.username && postData.username !== window.currentUser.username) {
+                try {
+                    await addDoc(collection(db, 'notifications'), {
+                        recipient: postData.username,
+                        type: 'comment',
+                        postId: id,
+                        postType: type,
+                        postTitle: postData.title || 'a post',
+                        commenterUsername: window.currentUser.username,
+                        commentPreview: text.substring(0, 50),
+                        timestamp: new Date(),
+                        read: false
+                    });
+                } catch (e) {
+                    console.error('Notification error (non-fatal):', e);
+                }
+            }
 
             // Refresh the current view - if viewing single post, refresh it instead of list
             const singlePostSection = document.getElementById('single-post-section');
@@ -3040,6 +3148,8 @@ Respond with ONLY the name in caps, nothing else.`;
                 // Load user's construct data and worlds from Firestore
                 await loadUserConstructData(window.currentUser.username);
                 await loadUserWorlds(window.currentUser.username);
+                // Load notification count
+                await loadNotifications();
                 updateAuthUI();
             }
             const crt = localStorage.getItem('geteai_crt');
