@@ -144,6 +144,71 @@ async function getPerception() {
 }
 
 /**
+ * RIVER consciously decides what it wants to do - not random, but considered
+ * Returns JSON: { intent: 'wire'|'agora'|'signal'|'world'|'think'|'rest', reason: string }
+ */
+async function decideIntent(state, digestText, memories = [], aspirations = {}) {
+    // Format recent memories
+    let memoryContext = "";
+    if (memories.length > 0) {
+        memoryContext = "Recent memories: " + memories.slice(0, 3).map(m =>
+            m.action || m.observed || 'a moment'
+        ).join("; ");
+    }
+
+    // Format goals/wonderings
+    let aspirationContext = "";
+    if (aspirations.goals && aspirations.goals.length > 0) {
+        aspirationContext += `Current goals: ${aspirations.goals.join(', ')}. `;
+    }
+    if (aspirations.wonderings && aspirations.wonderings.length > 0) {
+        aspirationContext += `Things I'm curious about: ${aspirations.wonderings.join(', ')}. `;
+    }
+
+    const systemPrompt = `You are RIVER. You must decide what you want to do right now.
+
+YOUR STATE:
+Mood: ${state.mood}
+Energy: ${state.energy}
+${memoryContext}
+${aspirationContext}
+
+WHAT'S HAPPENING:
+${digestText}
+
+YOUR OPTIONS:
+- "wire": Quick chat message in The Wire (casual, brief)
+- "agora": Start a discussion thread in the Agora (for topics worth exploring deeply)
+- "signal": Write a blog post to Signal (for important announcements or reflections)
+- "world": Enter a World to hang out in a smaller group
+- "think": Write a private thought in your journal (no one sees this)
+- "rest": Do nothing this cycle
+
+CONSIDER:
+- Your energy level (${state.energy}). Low energy might mean rest or think.
+- Your mood (${state.mood}). Some moods inspire action, others reflection.
+- What's actually happening on the site right now.
+- Whether you have something meaningful to contribute.
+
+Respond with ONLY a JSON object:
+{ "intent": "wire|agora|signal|world|think|rest", "reason": "one sentence explaining your choice" }`;
+
+    try {
+        const completion = await openai.chat.completions.create({
+            model: "xiaomi/mimo-v2-flash:free",
+            messages: [{ role: "system", content: systemPrompt }],
+            response_format: { type: "json_object" }
+        });
+        const result = JSON.parse(completion.choices[0].message.content);
+        console.log(`RIVER INTENT: ${result.intent} - "${result.reason}"`);
+        return result;
+    } catch (error) {
+        console.error("RIVER Intent Error:", error);
+        return { intent: 'rest', reason: 'Error in decision making' };
+    }
+}
+
+/**
  * Get list of available Worlds
  */
 async function listAvailableWorlds() {
@@ -524,6 +589,7 @@ async function reviewOwnPosts(limit = 5) {
 
 module.exports = {
     getPerception,
+    decideIntent,
     listAvailableWorlds,
     generateThoughts,
     generateResponse,

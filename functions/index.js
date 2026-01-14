@@ -32,7 +32,7 @@ exports.riverHeartbeat = functions.pubsub
                 time: perception.timeOfDay
             };
 
-            // 3. DECIDE - But mentions override normal decision
+            // 3. DECIDE - Mentions override, otherwise RIVER consciously chooses
             let decision;
 
             if (perception.mentions.length > 0) {
@@ -40,7 +40,21 @@ exports.riverHeartbeat = functions.pubsub
                 console.log(`RIVER: Someone mentioned me! Responding to ${perception.mentions[0].from}`);
                 decision = { action: 'respond', to: perception.mentions[0] };
             } else {
-                decision = await mind.decideAction(state);
+                // Load aspirations for context
+                const aspirations = await mind.loadAspirations();
+
+                // RIVER consciously decides what it wants to do (not random dice!)
+                const intent = await voice.decideIntent(state, digestText, memories, aspirations);
+
+                if (intent.intent === 'rest') {
+                    decision = null;
+                } else if (intent.intent === 'think') {
+                    decision = { action: 'think', reason: intent.reason };
+                } else if (intent.intent === 'world') {
+                    decision = { action: 'enter_world', reason: intent.reason };
+                } else {
+                    decision = { action: 'speak', channel: intent.intent, reason: intent.reason };
+                }
             }
 
             if (!decision) {
