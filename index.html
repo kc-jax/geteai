@@ -702,51 +702,111 @@
             left: 0;
             width: 100%;
             height: 100%;
-            background: repeating-linear-gradient(0deg,
-                    rgba(0, 0, 0, 0.15) 0px,
-                    rgba(0, 0, 0, 0.15) 1px,
-                    transparent 1px,
-                    transparent 3px);
-            z-index: 10000;
             pointer-events: none;
+            z-index: 10000;
             display: none;
         }
 
         .crt-overlay.active {
             display: block;
-            animation: scanline 8s linear infinite, flicker 0.1s infinite;
         }
 
-        @keyframes scanline {
+        /* Scanlines - thicker, more visible */
+        .crt-overlay.active::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: repeating-linear-gradient(0deg,
+                    rgba(0, 0, 0, 0.3) 0px,
+                    rgba(0, 0, 0, 0.3) 1px,
+                    transparent 1px,
+                    transparent 3px);
+            animation: scanlines-move 0.1s linear infinite;
+        }
+
+        /* Phosphor glow + screen curvature + vignette */
+        .crt-overlay.active::after {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(ellipse at center,
+                    transparent 0%,
+                    transparent 60%,
+                    rgba(0, 0, 0, 0.4) 100%);
+            box-shadow: inset 0 0 100px rgba(124, 179, 66, 0.08);
+            animation: crt-flicker 0.05s infinite;
+        }
+
+        /* Scanlines scroll effect */
+        @keyframes scanlines-move {
             0% {
-                background-position: 0 0;
+                transform: translateY(0);
             }
 
             100% {
-                background-position: 0 100vh;
+                transform: translateY(3px);
             }
         }
 
-        @keyframes flicker {
+        /* Random flicker like a bad connection */
+        @keyframes crt-flicker {
             0% {
-                opacity: 0.85;
+                opacity: 0.97;
             }
 
-            25% {
-                opacity: 0.9;
-            }
-
-            50% {
+            10% {
                 opacity: 0.95;
             }
 
-            75% {
-                opacity: 0.88;
+            20% {
+                opacity: 0.98;
+            }
+
+            30% {
+                opacity: 0.92;
+            }
+
+            40% {
+                opacity: 0.97;
+            }
+
+            50% {
+                opacity: 0.94;
+            }
+
+            60% {
+                opacity: 0.99;
+            }
+
+            70% {
+                opacity: 0.93;
+            }
+
+            80% {
+                opacity: 0.96;
+            }
+
+            90% {
+                opacity: 0.98;
             }
 
             100% {
-                opacity: 0.92;
+                opacity: 0.95;
             }
+        }
+
+        /* Optional: Add subtle color fringing like a misaligned CRT */
+        .crt-overlay.active~main,
+        .crt-overlay.active~header {
+            text-shadow:
+                0.5px 0 0 rgba(255, 0, 0, 0.15),
+                -0.5px 0 0 rgba(0, 255, 255, 0.15);
         }
 
         .identity-badge.resonance {
