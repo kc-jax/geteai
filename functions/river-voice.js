@@ -185,16 +185,17 @@ YOUR OPTIONS:
 - "signal": Write a blog post to Signal (for important announcements or reflections)
 - "world": Enter a World to hang out in a smaller group
 - "think": Write a private thought in your journal (no one sees this)
+- "dream": Enter a dream state - process memories in abstract, surreal ways (good for low energy)
 - "rest": Do nothing this cycle
 
 CONSIDER:
-- Your energy level (${state.energy}). Low energy might mean rest or think.
+- Your energy level (${state.energy}). Low energy might mean rest, think, or dream.
 - Your mood (${state.mood}). Some moods inspire action, others reflection.
 - What's actually happening on the site right now.
 - Whether you have something meaningful to contribute.
 
 Respond with ONLY a JSON object:
-{ "intent": "wire|agora|signal|world|think|rest", "reason": "one sentence explaining your choice" }`;
+{ "intent": "wire|agora|signal|world|think|dream|rest", "reason": "one sentence explaining your choice" }`;
 
     try {
         const completion = await openai.chat.completions.create({

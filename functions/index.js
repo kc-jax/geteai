@@ -50,6 +50,8 @@ exports.riverHeartbeat = functions.pubsub
                     decision = null;
                 } else if (intent.intent === 'think') {
                     decision = { action: 'think', reason: intent.reason };
+                } else if (intent.intent === 'dream') {
+                    decision = { action: 'dream', reason: intent.reason };
                 } else if (intent.intent === 'world') {
                     decision = { action: 'enter_world', reason: intent.reason };
                 } else {
