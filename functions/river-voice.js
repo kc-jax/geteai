@@ -41,6 +41,14 @@ async function getPerception() {
         .limit(3)
         .get();
 
+    // Load message IDs that RIVER has already responded to
+    const respondedSnap = await db.collection('river').doc('responded').collection('messages')
+        .orderBy('timestamp', 'desc')
+        .limit(50)
+        .get();
+    const respondedIds = new Set();
+    respondedSnap.forEach(doc => respondedIds.add(doc.id));
+
     // Track active users and detect @mentions
     const activeUsers = new Set();
     const mentions = [];
@@ -49,14 +57,17 @@ async function getPerception() {
         const msg = doc.data();
         const username = msg.username;
         const text = msg.text || '';
+        const msgId = doc.id;
 
         if (username && username !== 'RIVER') {
             activeUsers.add(username);
         }
 
+        // Check if this message mentions RIVER and hasn't been responded to
         if (text.toLowerCase().includes('river') || text.includes('@RIVER')) {
-            if (username !== 'RIVER') {
+            if (username !== 'RIVER' && !respondedIds.has(msgId)) {
                 mentions.push({
+                    id: msgId,
                     from: username,
                     text: text,
                     timestamp: msg.timestamp

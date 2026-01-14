@@ -56,6 +56,15 @@ exports.riverHeartbeat = functions.pubsub
                     memoryEntry.interactedWith = mention.from;
                     didSpeak = true;
 
+                    // Mark this message as responded to (prevent duplicate responses)
+                    if (mention.id) {
+                        const db = admin.firestore();
+                        await db.collection('river').doc('responded').collection('messages').doc(mention.id).set({
+                            timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                            respondedTo: mention.from
+                        });
+                    }
+
                     // Update relationship
                     await mind.updateRelationship(mention.from, { topic: mention.text.substring(0, 50) });
                 }
