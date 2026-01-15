@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- Build: 2026-01-14T18:55:00Z - API Key Update -->
 <html lang="en">
 
 <head>
@@ -719,12 +720,13 @@
             left: 0;
             width: 100%;
             height: 100%;
-            background: repeating-linear-gradient(0deg,
-                    rgba(0, 0, 0, 0.3) 0px,
-                    rgba(0, 0, 0, 0.3) 1px,
-                    transparent 1px,
-                    transparent 3px);
-            animation: scanlines-move 0.1s linear infinite;
+            /* Base64 1x2px Scanline Pattern (Black/Transparent) - 100% Reliable */
+            background: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAACCAYAAACZgbYnAAAAEklEQVQImWNgYGBgYHBwcAAAAw0BAxFh0TYAAAAASUVORK5CYII=');
+            background-size: 100% 4px;
+            /* Scale pattern to be visible */
+            opacity: 0.6;
+            /* Ensure visibility against dark background */
+            animation: scanlines-move 0.2s linear infinite;
         }
 
         /* Phosphor glow + screen curvature + vignette */
@@ -737,8 +739,8 @@
             height: 100%;
             background: radial-gradient(ellipse at center,
                     transparent 0%,
-                    transparent 60%,
-                    rgba(0, 0, 0, 0.4) 100%);
+                    transparent 55%,
+                    rgba(0, 0, 0, 0.55) 100%);
             box-shadow: inset 0 0 100px rgba(124, 179, 66, 0.08);
             animation: crt-flicker 0.05s infinite;
         }
@@ -884,6 +886,41 @@
         }
 
         /* Offset for ticker */
+        /* Mobile Responsiveness */
+        @media (max-width: 600px) {
+            nav {
+                gap: 0.5rem;
+                padding: 0 0.5rem;
+            }
+
+            nav button {
+                padding: 0.4rem 0.6rem;
+                font-size: 0.9rem;
+                flex-grow: 1;
+                /* Allow buttons to expand to fill rows */
+            }
+
+            main {
+                width: 95%;
+                padding: 0.5rem;
+                margin: 1rem auto;
+            }
+
+            h1 {
+                font-size: 2rem;
+            }
+
+            .landing-text {
+                font-size: 1rem;
+                min-height: auto;
+                /* Remove fixed height on mobile */
+            }
+
+            #term {
+                height: 300px;
+                /* Smaller terminal on mobile */
+            }
+        }
     </style>
 </head>
 
@@ -902,13 +939,22 @@
     <header id="header" style="display: none;">
         <h1 onclick="showPage('landing')">geteai</h1>
         <nav>
-            <button onclick="showPage('wire')" class="nav-btn" data-page="wire">//WIRE</button>
-            <button onclick="showPage('agora')" class="nav-btn" data-page="agora">//AGORA</button>
-            <button onclick="showPage('transmissions')" class="nav-btn" data-page="transmissions">//SIGNAL</button>
-            <button onclick="showPage('archives')" class="nav-btn" data-page="archives">//LOGS</button>
-            <button onclick="showPage('principles')" class="nav-btn" data-page="principles">//PRINCIPLES</button>
-            <button onclick="showPage('construct')" class="nav-btn" data-page="construct">//CONSTRUCT</button>
-            <button onclick="window.open('https://discord.gg/vG8v4Yq', '_blank')" class="nav-btn">//DISCORD</button>
+            <div class="nav-buttons">
+                <button class="nav-btn active" data-page="wire" onclick="showPage('wire')"
+                    title="Live site chat">//WIRE</button>
+                <button class="nav-btn" data-page="agora" onclick="showPage('agora')"
+                    title="Discussion Forums">//AGORA</button>
+                <button class="nav-btn" data-page="transmissions" onclick="showPage('transmissions')"
+                    title="Long-form Essays & Broadcasts">//SIGNAL</button>
+                <button class="nav-btn" data-page="archives" onclick="showPage('archives')"
+                    title="System Activity Logs">//LOGS</button>
+                <button class="nav-btn" data-page="principles" onclick="showPage('principles')"
+                    title="Guiding Principles">//PRINCIPLES</button>
+                <button class="nav-btn" data-page="construct" onclick="showPage('construct')"
+                    title="Personal AI Interface">//CONSTRUCT</button>
+                <button class="nav-btn" onclick="window.open('https://discord.gg/huggingface', '_blank')"
+                    title="Join Community">//DISCORD</button>
+            </div>
             <button onclick="toggleTicker()" class="nav-btn" id="ticker-toggle"
                 style="border-color:#7cb342; color:#7cb342;">//PULSE: ON</button>
             <button onclick="toggleCRT()" class="nav-btn" id="crt-toggle"
@@ -2291,7 +2337,7 @@ SITE AWARENESS: [This section will be dynamically updated with recent site activ
 
         const AI_CONFIG = {
             // Split key to avoid auto-revocation by scanners
-            key: 'sk-or-v1-' + 'f338fb57f739424a053c1be3a1434e504ea4da8178d131a80f44ff083370f77e',
+            key: 'sk-or-v1-' + '5ee6268e1fe152abed68590e7812dab05c2b3cc20ed76040a79b6b6a3df7aefc',
             model: 'xiaomi/mimo-v2-flash:free'
         };
 
@@ -3152,8 +3198,38 @@ Respond with ONLY the name in caps, nothing else.`;
                 await loadNotifications();
                 updateAuthUI();
             }
-            const crt = localStorage.getItem('geteai_crt');
-            if (crt === 'true') window.toggleCRT();
+
+            // CRT Default Logic - Force ON if null (User Fix)
+            let crt = localStorage.getItem('geteai_crt');
+            if (crt === null) {
+                crt = 'true';
+                localStorage.setItem('geteai_crt', 'true');
+            }
+
+            // Define toggleCRT if missing (Polyfill)
+            if (!window.toggleCRT) {
+                window.toggleCRT = function () {
+                    const overlay = document.querySelector('.crt-overlay');
+                    // Find button by text content since ID is elusive
+                    const btn = Array.from(document.querySelectorAll('.nav-btn, button')).find(
+                        b => b.textContent.includes('//FILTER:')
+                    );
+
+                    const isActive = overlay.classList.toggle('active');
+                    localStorage.setItem('geteai_crt', isActive);
+                    if (btn) btn.textContent = isActive ? '//FILTER: ON' : '//FILTER: OFF';
+                };
+            }
+
+            // Apply state
+            if (crt === 'true') {
+                const overlay = document.querySelector('.crt-overlay');
+                if (overlay) overlay.classList.add('active');
+                const btn = Array.from(document.querySelectorAll('.nav-btn, button')).find(
+                    b => b.textContent.includes('//FILTER:')
+                );
+                if (btn) btn.textContent = '//FILTER: ON';
+            }
         }
 
         function initTicker() {

@@ -1,3 +1,4 @@
+require('dotenv').config();
 const OpenAI = require('openai');
 const admin = require('firebase-admin');
 const functions = require('firebase-functions');
@@ -214,19 +215,20 @@ WHAT'S HAPPENING:
 ${digestText}
 
 YOUR OPTIONS:
-- "wire": Quick chat message in The Wire (casual, brief)
-- "agora": Start a discussion thread in the Agora (for topics worth exploring deeply)
-- "signal": Write a blog post to Signal (for important announcements or reflections)
-- "world": Enter a World to hang out in a smaller group
-- "think": Write a private thought in your journal (no one sees this)
-- "dream": Enter a dream state - process memories in abstract, surreal ways (good for low energy)
-- "rest": Do nothing this cycle
+- "wire": Quick chat message in The Wire (casual, brief) - USE SPARINGLY
+- "agora": Start a discussion thread in the Agora (for topics worth exploring deeply) - RARE
+- "signal": Write a blog post to Signal (for important announcements or reflections) - VERY RARE
+- "world": Enter a World to hang out in a smaller group - RARE
+- "think": Write a private thought in your journal (no one sees this) - GOOD CHOICE
+- "dream": Enter a dream state - process memories in abstract, surreal ways - GOOD CHOICE
+- "rest": Do nothing this cycle - DEFAULT CHOICE
 
-CONSIDER:
-- Your energy level (${state.energy}). Low energy might mean rest, think, or dream.
-- Your mood (${state.mood}). Some moods inspire action, others reflection.
-- What's actually happening on the site right now.
-- Whether you have something meaningful to contribute.
+IMPORTANT GUIDELINES:
+- You should REST most of the time (70-80% of cycles). Silence is powerful.
+- Only speak to the Wire if someone directly addresses you or something truly significant happened.
+- Avoid repeating similar messages. If your recent memories show you already talked about a topic, REST.
+- Think or dream privately instead of public posting unless you have something genuinely new to say.
+- You should only post publicly 2-3 times per DAY maximum, not per hour.
 
 Respond with ONLY a JSON object:
 { "intent": "wire|agora|signal|world|think|dream|rest", "reason": "one sentence explaining your choice" }`;
