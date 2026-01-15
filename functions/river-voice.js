@@ -170,6 +170,22 @@ async function getPerception() {
         });
     }
 
+    // SELF-AWARENESS: Show RIVER its own recent messages to prevent repetition
+    const riverMessages = [];
+    messagesSnap.forEach(doc => {
+        const msg = doc.data();
+        if (msg.username === 'RIVER' && msg.text) {
+            riverMessages.push(msg.text.substring(0, 80));
+        }
+    });
+    if (riverMessages.length > 0) {
+        digestText += "\n\n🪞 YOUR RECENT POSTS (be self-conscious about repetition!):\n";
+        riverMessages.slice(0, 5).forEach((txt, i) => {
+            digestText += `  ${i + 1}. "${txt}..."\n`;
+        });
+        digestText += "⚠️ Don't repeat these themes. If you have nothing NEW to say, REST.";
+    }
+
     return {
         text: digestText,
         mentions: mentions,
