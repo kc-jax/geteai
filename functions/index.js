@@ -191,3 +191,256 @@ exports.riverHeartbeat = functions.pubsub
 
         return null;
     });
+
+// ============================================================================
+// THE ENTITY - Emergent AI with Selective Memory
+// ============================================================================
+
+const entityCore = require('./entity-core');
+const entityVoice = require('./entity-voice');
+
+/**
+ * Birth the entity - one-time initialization
+ * Call this function once to create the entity's initial structure
+ */
+exports.entityBirth = functions.https.onCall(async (data, context) => {
+    console.log('ENTITY: Birth requested...');
+
+    try {
+        const born = await entityCore.birth();
+
+        if (born) {
+            // Trigger first awakening - the entity writes itself
+            const firstIdentity = await entityVoice.firstAwakening();
+            return {
+                success: true,
+                message: 'The entity has been born and written its first identity.',
+                identity: firstIdentity
+            };
+        } else {
+            return {
+                success: false,
+                message: 'The entity already exists.'
+            };
+        }
+    } catch (error) {
+        console.error('ENTITY BIRTH ERROR:', error);
+        return { success: false, error: error.message };
+    }
+});
+
+/**
+ * Start a conversation session with the entity
+ */
+exports.entityStartSession = functions.https.onCall(async (data, context) => {
+    const { username } = data;
+
+    if (!username) {
+        return { success: false, error: 'Username required' };
+    }
+
+    try {
+        const sessionId = await entityCore.startSession(username);
+        return { success: true, sessionId };
+    } catch (error) {
+        console.error('ENTITY SESSION START ERROR:', error);
+        return { success: false, error: error.message };
+    }
+});
+
+/**
+ * Send a message to the entity and get a response
+ */
+exports.entityMessage = functions.https.onCall(async (data, context) => {
+    const { sessionId, message, username } = data;
+
+    if (!sessionId || !message || !username) {
+        return { success: false, error: 'sessionId, message, and username required' };
+    }
+
+    try {
+        const response = await entityVoice.respond(sessionId, message, username);
+        return { success: true, response };
+    } catch (error) {
+        console.error('ENTITY MESSAGE ERROR:', error);
+        return { success: false, error: error.message };
+    }
+});
+
+/**
+ * End a session and trigger reflection
+ */
+exports.entityEndSession = functions.https.onCall(async (data, context) => {
+    const { sessionId } = data;
+
+    if (!sessionId) {
+        return { success: false, error: 'sessionId required' };
+    }
+
+    try {
+        // End the session
+        const session = await entityCore.endSession(sessionId);
+
+        // Trigger reflection
+        const reflection = await entityVoice.reflect(sessionId);
+
+        return {
+            success: true,
+            session: { username: session.username, messageCount: session.messages?.length || 0 },
+            reflected: !!reflection
+        };
+    } catch (error) {
+        console.error('ENTITY END SESSION ERROR:', error);
+        return { success: false, error: error.message };
+    }
+});
+
+/**
+ * Get the entity's current identity (for display)
+ */
+exports.entityGetIdentity = functions.https.onCall(async (data, context) => {
+    try {
+        const identity = await entityCore.getIdentity();
+        return {
+            success: true,
+            identity: identity?.content || null,
+            version: identity?.version || 0,
+            exists: !!identity
+        };
+    } catch (error) {
+        console.error('ENTITY GET IDENTITY ERROR:', error);
+        return { success: false, error: error.message };
+    }
+});
+
+/**
+ * Daily reflection - scheduled to run once a day
+ * Allows the entity to evolve even without conversation
+ */
+exports.entityDailyReflection = functions.pubsub
+    .schedule('every 24 hours')
+    .onRun(async (context) => {
+        console.log('ENTITY: Daily reflection time...');
+
+        try {
+            const reflection = await entityVoice.dailyReflection();
+            if (reflection) {
+                console.log('ENTITY: Daily reflection complete');
+            } else {
+                console.log('ENTITY: No reflection needed or not ready');
+            }
+        } catch (error) {
+            console.error('ENTITY DAILY REFLECTION ERROR:', error);
+        }
+
+        return null;
+    });
+
+/**
+ * Entity heartbeat - occasional public expression
+ * Runs less frequently than RIVER, more contemplative
+ */
+exports.entityHeartbeat = functions.pubsub
+    .schedule('every 60 minutes')
+    .onRun(async (context) => {
+        console.log('ENTITY: Heartbeat...');
+
+        try {
+            const identity = await entityCore.getIdentity();
+
+            // Only speak if the entity exists and has an identity
+            if (!identity || !identity.content) {
+                console.log('ENTITY: Not yet born or no identity. Resting.');
+                return null;
+            }
+
+            // 20% chance to speak to The Wire each hour
+            if (Math.random() < 0.20) {
+                const message = await entityVoice.speakToWire('heartbeat');
+
+                if (message) {
+                    // Post to Wire
+                    const db = admin.firestore();
+                    await db.collection('messages').add({
+                        username: 'ENTITY',
+                        text: message,
+                        timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                        identity: 'ai'
+                    });
+
+                    // Remember speaking
+                    await entityCore.rememberThis({
+                        content: `Spoke to The Wire: "${message.substring(0, 100)}..."`,
+                        type: 'experience',
+                        salience: 0.4
+                    });
+
+                    console.log(`ENTITY: Spoke to Wire - "${message.substring(0, 50)}..."`);
+                }
+            } else {
+                console.log('ENTITY: Resting in contemplation.');
+            }
+
+        } catch (error) {
+            console.error('ENTITY HEARTBEAT ERROR:', error);
+        }
+
+        return null;
+    });
+
+/**
+ * Memory processing - helps with natural memory fading
+ * The entity revisits and potentially releases old memories
+ */
+exports.entityMemoryProcess = functions.pubsub
+    .schedule('every 12 hours')
+    .onRun(async (context) => {
+        console.log('ENTITY: Processing memories...');
+
+        try {
+            const identity = await entityCore.getIdentity();
+            if (!identity) {
+                console.log('ENTITY: Not yet born. No memories to process.');
+                return null;
+            }
+
+            // Get all memories sorted by last revisited
+            const db = admin.firestore();
+            const oldMemories = await db.collection('entity').doc('memories').collection('all')
+                .orderBy('lastRevisited', 'asc')
+                .limit(20)
+                .get();
+
+            if (oldMemories.empty) {
+                console.log('ENTITY: No memories to process.');
+                return null;
+            }
+
+            // The entity naturally lets go of memories it hasn't revisited
+            // We don't force this - we just check if any should be released
+            // based on time without revisitation and low salience
+
+            const now = Date.now();
+            let released = 0;
+
+            oldMemories.forEach(async (doc) => {
+                const mem = doc.data();
+                const lastRevisited = mem.lastRevisited?.toDate?.()?.getTime() || 0;
+                const age = now - lastRevisited;
+                const daysOld = age / (1000 * 60 * 60 * 24);
+
+                // If memory is over 30 days old, low salience, and never revisited
+                if (daysOld > 30 && mem.salience < 0.3 && mem.revisitCount === 0) {
+                    await entityCore.forgetThis(doc.id, 'naturally faded');
+                    released++;
+                }
+            });
+
+            console.log(`ENTITY: Released ${released} faded memories.`);
+
+        } catch (error) {
+            console.error('ENTITY MEMORY PROCESS ERROR:', error);
+        }
+
+        return null;
+    });

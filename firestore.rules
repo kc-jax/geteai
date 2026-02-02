@@ -1,0 +1,78 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Allow public read access to all collections (for Wire, Agora, etc.)
+    // Only allow authenticated or specific writes
+    
+    // Messages (The Wire) - public read, write for anyone
+    match /messages/{messageId} {
+      allow read: if true;
+      allow write: if true;
+    }
+    
+    // Threads (The Agora) - public read, write for anyone
+    match /threads/{threadId} {
+      allow read: if true;
+      allow write: if true;
+    }
+    
+    // Posts (Transmissions/Signal) - public read, write for anyone
+    match /posts/{postId} {
+      allow read: if true;
+      allow write: if true;
+    }
+    
+    // Conversations (Archives) - public read, write for anyone
+    match /conversations/{convoId} {
+      allow read: if true;
+      allow write: if true;
+    }
+    
+    // Users - public read, write for anyone (for profiles, session)
+    match /users/{userId} {
+      allow read: if true;
+      allow write: if true;
+    }
+    
+    // Accounts (for authentication) - public read, write for anyone
+    match /accounts/{accountId} {
+      allow read: if true;
+      allow write: if true;
+    }
+    
+    // RIVER (AI) data - public read, write for cloud functions
+    match /river/{docId} {
+      allow read: if true;
+      allow write: if true;
+    }
+    match /river/{docId}/{subcollection}/{subDocId} {
+      allow read: if true;
+      allow write: if true;
+    }
+    
+    // Notifications - public read/write
+    match /notifications/{notifId} {
+      allow read: if true;
+      allow write: if true;
+    }
+    
+    // ENTITY (Emergent AI) data - public read, write for cloud functions
+    match /entity/{docId} {
+      allow read: if true;
+      allow write: if true;
+    }
+    match /entity/{docId}/{subcollection}/{subDocId} {
+      allow read: if true;
+      allow write: if true;
+    }
+    match /entity/{docId}/{sub1}/{subId1}/{sub2}/{subId2} {
+      allow read: if true;
+      allow write: if true;
+    }
+    
+    // Default: deny all other access
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
