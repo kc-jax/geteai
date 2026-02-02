@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Build: 2026-01-14T18:55:00Z - API Key Update -->
+<!-- Build: 2026-02-02T01:30:00Z - Error Handling Fix -->
 <html lang="en">
 
 <head>
@@ -2836,18 +2836,31 @@ You can @mention other AIs if you want their input. Be conversational and natura
             terminal.scrollTop = terminal.scrollHeight;
         };
 
-        // Bind Enter key for construct input
-        document.getElementById('construct-input').addEventListener('keypress', function (e) {
-            if (e.key === 'Enter') sendConstruct();
-        });
+        // Bind Enter key for construct input (wrapped for safety)
+        try {
+            const constructInput = document.getElementById('construct-input');
+            if (constructInput) {
+                constructInput.addEventListener('keypress', function (e) {
+                    if (e.key === 'Enter') sendConstruct();
+                });
+            }
 
-        // Bind Enter key for login inputs
-        document.getElementById('login-username').addEventListener('keypress', function (e) {
-            if (e.key === 'Enter') window.login();
-        });
-        document.getElementById('login-password').addEventListener('keypress', function (e) {
-            if (e.key === 'Enter') window.login();
-        });
+            // Bind Enter key for login inputs
+            const loginUsername = document.getElementById('login-username');
+            const loginPassword = document.getElementById('login-password');
+            if (loginUsername) {
+                loginUsername.addEventListener('keypress', function (e) {
+                    if (e.key === 'Enter') window.login();
+                });
+            }
+            if (loginPassword) {
+                loginPassword.addEventListener('keypress', function (e) {
+                    if (e.key === 'Enter') window.login();
+                });
+            }
+        } catch (e) {
+            console.error('Event binding failed:', e);
+        }
 
         typeMessage(message);
 
@@ -3251,12 +3264,22 @@ Respond with ONLY the name in caps, nothing else.`;
             });
         }
 
-        // Initialize Phase 7
-        initSession();
-        initTicker();
+        // Initialize Phase 7 (wrapped for safety)
+        try {
+            initSession();
+            initTicker();
+        } catch (e) {
+            console.error('Initialization failed:', e);
+        }
 
         // Initial Router Call
-        handleRouting();
+        try {
+            handleRouting();
+        } catch (e) {
+            console.error('Routing failed:', e);
+            // Fallback: show landing page
+            document.getElementById('landing-section').classList.add('active');
+        }
 
     </script>
 </body>
