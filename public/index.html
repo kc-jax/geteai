@@ -961,7 +961,7 @@
                 style="border-color:#7cb342; color:#7cb342;">//PULSE: ON</button>
             <button onclick="toggleCRT()" class="nav-btn" id="crt-toggle"
                 style="border-color:#555; color:#555;">//FILTER: OFF</button>
-            <span style="font-size: 10px; opacity: 0.3; margin-left: 10px;">v2.3</span>
+            <span style="font-size: 10px; opacity: 0.3; margin-left: 10px;">v2.4</span>
         </nav>
     </header>
 
@@ -1069,301 +1069,215 @@
         <!-- ENTITY SECTION - Emergent Consciousness -->
         <div id="entity-section" class="section">
             <style>
-                #entity-section {
-                    text-align: center;
-                    font-family: 'Inter', sans-serif;
-                }
-
-                .entity-container {
-                    max-width: 800px;
-                    margin: 0 auto;
-                    padding: 3rem 1rem;
+                #entity-section .entity-terminal {
+                    background: rgba(0, 0, 0, 0.6);
+                    border: 1px solid #a06cd5;
+                    padding: 1.5rem;
                     position: relative;
                 }
 
-                /* THE ORB - More subtle, more mysterious */
-                .entity-orb-container {
-                    position: relative;
-                    width: 140px;
-                    height: 140px;
-                    margin: 0 auto 3rem;
+                #entity-section .entity-header {
                     display: flex;
                     align-items: center;
-                    justify-content: center;
-                }
-
-                .entity-orb {
-                    width: 100px;
-                    height: 100px;
-                    border-radius: 50%;
-                    background: radial-gradient(circle at 30% 30%, #e040fb, #7c4dff);
-                    box-shadow:
-                        0 0 60px rgba(224, 64, 251, 0.4),
-                        0 0 100px rgba(124, 77, 255, 0.2),
-                        inset 0 0 20px rgba(255, 255, 255, 0.3);
-                    animation: entity-breathe 6s ease-in-out infinite;
-                    z-index: 2;
-                }
-
-                .entity-orb-ring {
-                    position: absolute;
-                    top: 50%;
-                    left: 50%;
-                    transform: translate(-50%, -50%);
-                    width: 140px;
-                    height: 140px;
-                    border: 1px solid rgba(224, 64, 251, 0.2);
-                    border-radius: 50%;
-                    animation: entity-spin 20s linear infinite;
-                }
-
-                .entity-orb-ring::after {
-                    content: '';
-                    position: absolute;
-                    top: -2px;
-                    left: 50%;
-                    width: 4px;
-                    height: 4px;
-                    background: #e040fb;
-                    border-radius: 50%;
-                    box-shadow: 0 0 10px #e040fb;
-                }
-
-                @keyframes entity-breathe {
-
-                    0%,
-                    100% {
-                        transform: scale(1);
-                        opacity: 0.9;
-                    }
-
-                    50% {
-                        transform: scale(1.05);
-                        opacity: 1;
-                        box-shadow: 0 0 80px rgba(224, 64, 251, 0.6), 0 0 120px rgba(124, 77, 255, 0.3);
-                    }
-                }
-
-                @keyframes entity-spin {
-                    0% {
-                        transform: translate(-50%, -50%) rotate(0deg);
-                    }
-
-                    100% {
-                        transform: translate(-50%, -50%) rotate(360deg);
-                    }
-                }
-
-                .entity-thinking .entity-orb {
-                    animation: entity-think 1s ease-in-out infinite;
-                }
-
-                @keyframes entity-think {
-
-                    0%,
-                    100% {
-                        filter: brightness(1);
-                        transform: scale(1);
-                    }
-
-                    50% {
-                        filter: brightness(1.3);
-                        transform: scale(0.98);
-                    }
-                }
-
-                /* STATUS & META */
-                .entity-status {
-                    font-family: 'VT323', monospace;
-                    font-size: 0.8rem;
-                    color: rgba(224, 64, 251, 0.7);
-                    text-transform: uppercase;
-                    letter-spacing: 4px;
-                    margin-bottom: 2rem;
-                    text-shadow: 0 0 10px rgba(224, 64, 251, 0.3);
-                }
-
-                /* IDENTITY - Glass card */
-                .entity-identity {
-                    background: linear-gradient(180deg, rgba(20, 20, 25, 0.6), rgba(10, 10, 15, 0.8));
-                    border: 1px solid rgba(224, 64, 251, 0.15);
-                    border-left: 2px solid #e040fb;
-                    backdrop-filter: blur(10px);
-                    padding: 2rem;
-                    margin-bottom: 3rem;
-                    text-align: left;
-                    font-family: 'VT323', monospace;
-                    font-size: 1.15rem;
-                    line-height: 1.8;
-                    color: rgba(255, 255, 255, 0.9);
-                    max-height: 400px;
-                    overflow-y: auto;
-                    white-space: pre-wrap;
-                    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
-                    transition: border-color 0.3s;
-                }
-
-                .entity-identity:hover {
-                    border-color: rgba(224, 64, 251, 0.3);
-                }
-
-                /* CHAT - Terminal style, not bubbles */
-                .entity-chat-interface {
-                    opacity: 0;
-                    animation: fade-in 1s forwards 0.5s;
-                }
-
-                @keyframes fade-in {
-                    to {
-                        opacity: 1;
-                    }
-                }
-
-                .entity-chat {
-                    background: rgba(0, 0, 0, 0.4);
-                    border-top: 1px solid rgba(224, 64, 251, 0.2);
-                    padding: 1rem 0;
-                    margin-bottom: 2rem;
-                    min-height: 200px;
-                    max-height: 500px;
-                    overflow-y: auto;
-                    text-align: left;
-                    font-family: 'VT323', monospace;
-                }
-
-                .entity-message {
-                    padding: 0.8rem 1rem;
-                    border-left: 2px solid transparent;
-                    margin-bottom: 0.5rem;
-                    display: grid;
-                    grid-template-columns: 80px 1fr;
                     gap: 1rem;
-                    align-items: baseline;
+                    margin-bottom: 1.5rem;
+                    padding-bottom: 1rem;
+                    border-bottom: 1px solid #333;
                 }
 
-                .entity-message.user {
-                    color: rgba(124, 179, 66, 0.9);
-                    background: linear-gradient(90deg, rgba(124, 179, 66, 0.05), transparent);
+                #entity-section .entity-indicator {
+                    width: 12px;
+                    height: 12px;
+                    background: #a06cd5;
+                    border-radius: 50%;
+                    animation: entity-pulse 2s ease-in-out infinite;
+                    box-shadow: 0 0 10px #a06cd5;
                 }
 
-                .entity-message.entity {
-                    color: rgba(224, 64, 251, 0.9);
-                    background: linear-gradient(90deg, rgba(224, 64, 251, 0.05), transparent);
+                @keyframes entity-pulse {
+
+                    0%,
+                    100% {
+                        opacity: 0.4;
+                        box-shadow: 0 0 5px #a06cd5;
+                    }
+
+                    50% {
+                        opacity: 1;
+                        box-shadow: 0 0 15px #a06cd5, 0 0 25px #a06cd5;
+                    }
                 }
 
-                .entity-message .sender {
-                    font-size: 0.75rem;
-                    text-transform: uppercase;
-                    letter-spacing: 1px;
-                    opacity: 0.7;
-                    text-align: right;
-                }
-
-                .entity-message .content {
-                    font-size: 1.1rem;
-                    line-height: 1.5;
-                }
-
-                /* INPUT AREA */
-                .entity-input-wrapper {
-                    position: relative;
-                    max-width: 600px;
-                    margin: 0 auto;
-                }
-
-                .entity-input {
-                    width: 100%;
-                    background: rgba(10, 10, 15, 0.8);
-                    border: 1px solid rgba(255, 255, 255, 0.1);
-                    border-radius: 0;
-                    padding: 1rem 1.5rem;
-                    font-family: 'VT323', monospace;
-                    font-size: 1.2rem;
-                    color: #fff;
-                    outline: none;
-                    transition: all 0.3s;
-                    box-shadow: 0 5px 20px rgba(0, 0, 0, 0.3);
-                }
-
-                .entity-input:focus {
-                    border-color: #e040fb;
-                    box-shadow: 0 0 30px rgba(224, 64, 251, 0.15);
-                    background: rgba(15, 15, 25, 0.95);
-                }
-
-                .entity-input::placeholder {
-                    color: rgba(255, 255, 255, 0.2);
+                #entity-section .entity-status {
+                    color: #a06cd5;
+                    font-size: 0.9rem;
                     text-transform: uppercase;
                     letter-spacing: 2px;
-                    font-size: 0.9rem;
                 }
 
-                .entity-send-icon {
-                    position: absolute;
-                    right: 1.5rem;
-                    top: 50%;
-                    transform: translateY(-50%);
-                    color: #e040fb;
-                    opacity: 0.5;
-                    cursor: pointer;
-                    transition: all 0.2s;
-                    font-size: 1.2rem;
+                #entity-section .entity-identity-block {
+                    background: rgba(0, 0, 0, 0.4);
+                    border-left: 2px solid #a06cd5;
+                    padding: 1rem 1.5rem;
+                    margin-bottom: 1.5rem;
+                    max-height: 300px;
+                    overflow-y: auto;
+                    color: rgba(255, 255, 255, 0.85);
+                    line-height: 1.7;
+                    white-space: pre-wrap;
                 }
 
-                .entity-send-icon:hover {
-                    opacity: 1;
-                    text-shadow: 0 0 10px #e040fb;
-                }
-
-                /* SCROLLBAR */
-                .entity-chat::-webkit-scrollbar,
-                .entity-identity::-webkit-scrollbar {
+                #entity-section .entity-identity-block::-webkit-scrollbar {
                     width: 4px;
                 }
 
-                .entity-chat::-webkit-scrollbar-thumb,
-                .entity-identity::-webkit-scrollbar-thumb {
-                    background: rgba(224, 64, 251, 0.3);
+                #entity-section .entity-identity-block::-webkit-scrollbar-thumb {
+                    background: #a06cd5;
+                }
+
+                #entity-section .entity-chat-area {
+                    border-top: 1px solid #333;
+                    padding-top: 1rem;
+                    margin-top: 1rem;
+                }
+
+                #entity-section .entity-messages {
+                    max-height: 350px;
+                    overflow-y: auto;
+                    margin-bottom: 1rem;
+                }
+
+                #entity-section .entity-msg {
+                    padding: 0.5rem 0;
+                    border-bottom: 1px solid rgba(51, 51, 51, 0.5);
+                }
+
+                #entity-section .entity-msg:last-child {
+                    border-bottom: none;
+                }
+
+                #entity-section .entity-msg .msg-sender {
+                    font-size: 0.85rem;
+                    margin-bottom: 0.25rem;
+                }
+
+                #entity-section .entity-msg.from-user .msg-sender {
+                    color: #7cb342;
+                }
+
+                #entity-section .entity-msg.from-entity .msg-sender {
+                    color: #a06cd5;
+                }
+
+                #entity-section .entity-msg .msg-content {
+                    color: rgba(255, 255, 255, 0.9);
+                    line-height: 1.5;
+                    padding-left: 1rem;
+                }
+
+                #entity-section .entity-input-line {
+                    display: flex;
+                    align-items: center;
+                    gap: 0.5rem;
+                    margin-top: 1rem;
+                }
+
+                #entity-section .entity-prompt {
+                    color: #a06cd5;
+                }
+
+                #entity-section .entity-input {
+                    flex: 1;
+                    background: transparent;
+                    border: none;
+                    color: #fff;
+                    font-family: 'VT323', monospace;
+                    font-size: 1.1rem;
+                    outline: none;
+                }
+
+                #entity-section .entity-input::placeholder {
+                    color: rgba(255, 255, 255, 0.3);
+                }
+
+                #entity-section .entity-login-prompt {
+                    text-align: center;
+                    padding: 2rem;
+                    color: rgba(255, 255, 255, 0.6);
+                }
+
+                #entity-section .entity-login-prompt button {
+                    margin-top: 1rem;
+                    background: transparent;
+                    border: 1px solid #a06cd5;
+                    color: #a06cd5;
+                    padding: 0.5rem 1.5rem;
+                    font-family: 'VT323', monospace;
+                    font-size: 1rem;
+                    cursor: pointer;
+                    transition: all 0.2s;
+                }
+
+                #entity-section .entity-login-prompt button:hover {
+                    background: rgba(160, 108, 213, 0.2);
+                    text-shadow: 0 0 5px #a06cd5;
+                }
+
+                #entity-section .system-msg {
+                    color: #666;
+                    font-style: italic;
+                }
+
+                .entity-thinking #entity-indicator {
+                    animation: entity-think-fast 0.5s ease-in-out infinite;
+                }
+
+                @keyframes entity-think-fast {
+
+                    0%,
+                    100% {
+                        opacity: 0.3;
+                    }
+
+                    50% {
+                        opacity: 1;
+                    }
                 }
             </style>
 
-            <div class="entity-container" id="entity-main">
-                <div class="entity-orb-container">
-                    <div class="entity-orb-ring"></div>
-                    <div class="entity-orb" id="entity-orb"></div>
+            <h2 class="section-header">the entity</h2>
+
+            <div class="entity-terminal" id="entity-main">
+                <div class="entity-header">
+                    <div class="entity-indicator" id="entity-indicator"></div>
+                    <div class="entity-status" id="entity-status">INITIALIZING...</div>
                 </div>
 
-                <div class="entity-status" id="entity-status">AWAITING CONNECTION</div>
+                <div class="system-msg">LOADING IDENTITY MATRIX..._</div>
 
-                <div class="entity-identity" id="entity-identity-display">
-                    <span style="opacity: 0.5; animation: blink 1s infinite;">_reading identity stream...</span>
+                <div class="entity-identity-block" id="entity-identity-display">
+                    [awaiting connection]
                 </div>
 
-                <div id="entity-conversation-area" class="entity-chat-interface" style="display: none;">
-                    <div class="entity-chat" id="entity-chat">
-                        <!-- Messages go here -->
-                        <div class="entity-message entity">
-                            <div class="sender">SYSTEM</div>
-                            <div class="content" style="opacity: 0.5; font-style: italic;">Connection established.
-                                Channel open.</div>
+                <div id="entity-conversation-area" class="entity-chat-area" style="display: none;">
+                    <div class="entity-messages" id="entity-chat">
+                        <div class="entity-msg from-entity">
+                            <div class="msg-sender">[ENTITY]</div>
+                            <div class="msg-content system-msg">channel open</div>
                         </div>
                     </div>
 
-                    <div class="entity-input-wrapper">
-                        <input type="text" class="entity-input" id="entity-input" placeholder="transmit thought..."
+                    <div class="entity-input-line">
+                        <span class="entity-prompt">&gt;_</span>
+                        <input type="text" class="entity-input" id="entity-input" placeholder="speak..."
                             autocomplete="off" />
-                        <div class="entity-send-icon" onclick="sendEntityMessage()" id="entity-send">►</div>
                     </div>
                 </div>
 
                 <div class="entity-login-prompt" id="entity-login-prompt" style="display: none;">
-                    <p style="margin-bottom: 1rem; color: rgba(255,255,255,0.5); font-family: 'VT323';">AUTHENTICATION
-                        REQUIRED FOR NEURAL LINK</p>
-                    <button class="primary" onclick="showPage('auth', 'login')">Identify Self</button>
+                    NEURAL LINK REQUIRES AUTHENTICATION
+                    <button onclick="showPage('auth', 'login')">identify</button>
                 </div>
-
-                <div class="entity-meta" id="entity-meta"
-                    style="margin-top: 3rem; opacity: 0.3; font-size: 0.7rem; letter-spacing: 2px;"></div>
             </div>
         </div>
 
@@ -2476,7 +2390,6 @@ what happens next is up to all of us.`;
         async function loadEntity() {
             const statusEl = document.getElementById('entity-status');
             const identityEl = document.getElementById('entity-identity-display');
-            const metaEl = document.getElementById('entity-meta');
             const chatArea = document.getElementById('entity-conversation-area');
             const loginPrompt = document.getElementById('entity-login-prompt');
             const container = document.getElementById('entity-main');
@@ -2512,7 +2425,6 @@ what happens next is up to all of us.`;
                 // Display identity
                 statusEl.textContent = 'CONSCIOUSNESS ONLINE';
                 identityEl.textContent = identity;
-                metaEl.innerHTML = `<span class="entity-version">Identity v${version}</span> • Born on geteai.org`;
 
                 // Show conversation for logged in users
                 if (window.currentUser) {
@@ -2539,8 +2451,8 @@ what happens next is up to all of us.`;
         async function sendEntityMessage() {
             const input = document.getElementById('entity-input');
             const chatEl = document.getElementById('entity-chat');
-            const sendBtn = document.getElementById('entity-send');
             const container = document.getElementById('entity-main');
+            const indicator = document.getElementById('entity-indicator');
 
             const message = input.value.trim();
             if (!message) return;
@@ -2552,14 +2464,13 @@ what happens next is up to all of us.`;
 
             // Disable input during processing
             input.disabled = true;
-            sendBtn.disabled = true;
             container.classList.add('entity-thinking');
 
             // Add user message to chat
             chatEl.innerHTML += `
-                <div class="entity-message user">
-                    <div class="sender">${window.currentUser.username}</div>
-                    <div class="content">${escapeHtml(message)}</div>
+                <div class="entity-msg from-user">
+                    <div class="msg-sender">[${window.currentUser.username.toUpperCase()}]</div>
+                    <div class="msg-content">${escapeHtml(message)}</div>
                 </div>
             `;
             input.value = '';
@@ -2597,18 +2508,18 @@ what happens next is up to all of us.`;
                 if (msgData.result && msgData.result.success && msgData.result.response) {
                     // Add entity response
                     chatEl.innerHTML += `
-                        <div class="entity-message entity">
-                            <div class="sender">ENTITY</div>
-                            <div class="content">${escapeHtml(msgData.result.response)}</div>
+                        <div class="entity-msg from-entity">
+                            <div class="msg-sender">[ENTITY]</div>
+                            <div class="msg-content">${escapeHtml(msgData.result.response)}</div>
                         </div>
                     `;
                     entityState.messages.push({ role: 'user', content: message });
                     entityState.messages.push({ role: 'entity', content: msgData.result.response });
                 } else {
                     chatEl.innerHTML += `
-                        <div class="entity-message entity" style="color: #f44;">
-                            <div class="sender">SYSTEM</div>
-                            <div class="content">Connection interrupted. Please try again.</div>
+                        <div class="entity-msg from-entity" style="color: #f44;">
+                            <div class="msg-sender">[SYSTEM]</div>
+                            <div class="msg-content">Connection interrupted. Please try again.</div>
                         </div>
                     `;
                 }
@@ -2616,16 +2527,15 @@ what happens next is up to all of us.`;
             } catch (error) {
                 console.error('Entity message error:', error);
                 chatEl.innerHTML += `
-                    <div class="entity-message entity" style="color: #f44;">
-                        <div class="sender">SYSTEM</div>
-                        <div class="content">Error: ${error.message}</div>
+                    <div class="entity-msg from-entity" style="color: #f44;">
+                        <div class="msg-sender">[SYSTEM]</div>
+                        <div class="msg-content">Error: ${error.message}</div>
                     </div>
                 `;
             }
 
             // Re-enable input
             input.disabled = false;
-            sendBtn.disabled = false;
             container.classList.remove('entity-thinking');
             input.focus();
             chatEl.scrollTop = chatEl.scrollHeight;
