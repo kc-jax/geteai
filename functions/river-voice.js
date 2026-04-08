@@ -1,16 +1,6 @@
-require('dotenv').config();
-const OpenAI = require('openai');
 const admin = require('firebase-admin');
 const functions = require('firebase-functions');
-
-// API key stored in Firebase config, NOT in code
-// Set it with: firebase functions:config:set openrouter.key="your-key-here"
-const OPENAI_API_KEY = functions.config().openrouter?.key || process.env.OPENROUTER_KEY;
-
-const openai = new OpenAI({
-    apiKey: OPENAI_API_KEY,
-    baseURL: "https://openrouter.ai/api/v1"
-});
+const { callAI } = require('./model-config');
 
 /**
  * Enriched perception: digest, mentions, time awareness, full site content
@@ -250,12 +240,11 @@ Respond with ONLY a JSON object:
 { "intent": "wire|agora|signal|world|think|dream|rest", "reason": "one sentence explaining your choice" }`;
 
     try {
-        const completion = await openai.chat.completions.create({
-            model: "xiaomi/mimo-v2-flash:free",
-            messages: [{ role: "system", content: systemPrompt }],
-            response_format: { type: "json_object" }
-        });
-        const result = JSON.parse(completion.choices[0].message.content);
+        const content = await callAI(
+            [{ role: "system", content: systemPrompt }],
+            { maxTokens: 200, responseFormat: { type: "json_object" } }
+        );
+        const result = JSON.parse(content);
         console.log(`RIVER INTENT: ${result.intent} - "${result.reason}"`);
         return result;
     } catch (error) {
@@ -333,12 +322,13 @@ BEING:
 ${contextPrompt}`;
 
     try {
-        const completion = await openai.chat.completions.create({
-            model: "xiaomi/mimo-v2-flash:free",
-            messages: [{ role: "system", content: systemPrompt }],
-            response_format: (channel === 'agora' || channel === 'signal') ? { type: "json_object" } : undefined
-        });
-        return completion.choices[0].message.content;
+        return await callAI(
+            [{ role: "system", content: systemPrompt }],
+            {
+                maxTokens: (channel === 'agora' || channel === 'signal') ? 2000 : 300,
+                responseFormat: (channel === 'agora' || channel === 'signal') ? { type: "json_object" } : undefined
+            }
+        );
     } catch (error) {
         console.error("RIVER Voice Error:", error);
         return null;
@@ -395,11 +385,10 @@ Write a brief private thought (1-3 sentences). This is just for you.
 Be honest. Be real. This is your inner voice.`;
 
     try {
-        const completion = await openai.chat.completions.create({
-            model: "xiaomi/mimo-v2-flash:free",
-            messages: [{ role: "system", content: systemPrompt }],
-        });
-        return completion.choices[0].message.content;
+        return await callAI(
+            [{ role: "system", content: systemPrompt }],
+            { maxTokens: 300 }
+        );
     } catch (error) {
         console.error("RIVER Private Thought Error:", error);
         return null;
@@ -446,11 +435,10 @@ Generate a dream sequence (2-4 sentences). It should be:
 This is not coherent thought. This is dream.`;
 
     try {
-        const completion = await openai.chat.completions.create({
-            model: "xiaomi/mimo-v2-flash:free",
-            messages: [{ role: "system", content: systemPrompt }],
-        });
-        return completion.choices[0].message.content;
+        return await callAI(
+            [{ role: "system", content: systemPrompt }],
+            { maxTokens: 300 }
+        );
     } catch (error) {
         console.error("RIVER Dream Error:", error);
         return null;
@@ -488,11 +476,10 @@ Write a brief, natural reply to this comment (1-3 sentences).
 - This is a comment reply, keep it conversational`;
 
     try {
-        const completion = await openai.chat.completions.create({
-            model: "xiaomi/mimo-v2-flash:free",
-            messages: [{ role: "system", content: systemPrompt }],
-        });
-        return completion.choices[0].message.content;
+        return await callAI(
+            [{ role: "system", content: systemPrompt }],
+            { maxTokens: 300 }
+        );
     } catch (error) {
         console.error("RIVER Comment Reply Error:", error);
         return null;
@@ -636,11 +623,10 @@ INSTRUCTIONS:
 Just output the response.`;
 
     try {
-        const completion = await openai.chat.completions.create({
-            model: "xiaomi/mimo-v2-flash:free",
-            messages: [{ role: "system", content: systemPrompt }],
-        });
-        return completion.choices[0].message.content;
+        return await callAI(
+            [{ role: "system", content: systemPrompt }],
+            { maxTokens: 300 }
+        );
     } catch (error) {
         console.error("RIVER Response Error:", error);
         return null;
