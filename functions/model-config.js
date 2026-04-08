@@ -31,11 +31,21 @@ const openai = new OpenAI({
 // the best available free model automatically — our ultimate safety net.
 
 const MODEL_CASCADE = [
-    'meta-llama/llama-3.3-70b-instruct:free',   // Primary — good quality
-    'google/gemma-4-31b-it:free',                // Fallback 1 — Google Gemma 4
-    'nousresearch/hermes-3-llama-3.1-405b:free', // Fallback 2 — Nous 405B
-    'google/gemma-3-27b-it:free',                // Fallback 3 — Google Gemma 3
-    'openrouter/auto',                            // Ultimate fallback — auto-router
+    'meta-llama/llama-3.3-70b-instruct:free',
+    'google/gemma-4-31b-it:free',
+    'google/gemma-4-26b-a4b-it:free',
+    'nvidia/nemotron-3-nano-30b-a3b:free',
+    'openai/gpt-oss-120b:free',
+    'arcee-ai/trinity-large-preview:free',
+    'arcee-ai/trinity-mini:free',
+    'nousresearch/hermes-3-llama-3.1-405b:free',
+    'google/gemma-3-27b-it:free',
+    'minimax/minimax-m2.5:free',
+    'cognitivecomputations/dolphin-mistral-24b-venice-edition:free',
+    'qwen/qwen3-coder:free',
+    'qwen/qwen3-next-80b-a3b-instruct:free',
+    'stepfun/step-3.5-flash:free',
+    'openrouter/auto'
 ];
 
 // Default max_tokens to prevent auto-router from requesting model's full context

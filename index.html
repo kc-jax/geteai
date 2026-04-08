@@ -2721,11 +2721,21 @@ SITE AWARENESS: [This section will be dynamically updated with recent site activ
             key: 'sk-or-v1-' + '5ee6268e1fe152abed68590e7812dab05c2b3cc20ed76040a79b6b6a3df7aefc',
             // Resilient model cascade — if one is rate-limited, try the next
             models: [
-                'meta-llama/llama-3.3-70b-instruct:free',   // Primary
-                'google/gemma-4-31b-it:free',                // Fallback 1 — Gemma 4
-                'nousresearch/hermes-3-llama-3.1-405b:free', // Fallback 2 — Nous 405B
-                'google/gemma-3-27b-it:free',                // Fallback 3 — Gemma 3
-                'openrouter/auto',                            // Ultimate fallback — auto-router
+                'meta-llama/llama-3.3-70b-instruct:free',
+                'google/gemma-4-31b-it:free',
+                'google/gemma-4-26b-a4b-it:free',
+                'nvidia/nemotron-3-nano-30b-a3b:free',
+                'openai/gpt-oss-120b:free',
+                'arcee-ai/trinity-large-preview:free',
+                'arcee-ai/trinity-mini:free',
+                'nousresearch/hermes-3-llama-3.1-405b:free',
+                'google/gemma-3-27b-it:free',
+                'minimax/minimax-m2.5:free',
+                'cognitivecomputations/dolphin-mistral-24b-venice-edition:free',
+                'qwen/qwen3-coder:free',
+                'qwen/qwen3-next-80b-a3b-instruct:free',
+                'stepfun/step-3.5-flash:free',
+                'openrouter/auto'
             ],
             lastCallTime: 0,
             minInterval: 2000, // ms between calls
