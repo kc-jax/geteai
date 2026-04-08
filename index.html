@@ -1388,13 +1388,15 @@
                 const userDocRef = doc(db, 'users', username);
                 await updateDoc(userDocRef, {
                     constructRooms: constructState.rooms,
-                    constructHistory: constructState.history
+                    constructHistory: constructState.history,
+                    constructMemories: constructState.memories
                 }).catch(async () => {
                     // Document may not exist, use setDoc with merge
                     const { setDoc } = await import("https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js");
                     await setDoc(userDocRef, {
                         constructRooms: constructState.rooms,
-                        constructHistory: constructState.history
+                        constructHistory: constructState.history,
+                        constructMemories: constructState.memories
                     }, { merge: true });
                 });
             } catch (e) {
@@ -1418,6 +1420,9 @@
                     }
                     if (data.constructHistory) {
                         Object.assign(constructState.history, data.constructHistory);
+                    }
+                    if (data.constructMemories) {
+                        Object.assign(constructState.memories, data.constructMemories);
                     }
                     if (data.hostName) {
                         window.personalizedHostName = data.hostName;
@@ -2619,6 +2624,13 @@ what happens next is up to all of us.`;
                 oracle: [],
                 river: []
             },
+            memories: {
+                nexus: [],
+                void: [],
+                forge: [],
+                oracle: [],
+                river: []
+            },
             rooms: {
                 nexus: {
                     desc: "The living host of geteai. Guide, philosopher, friend.",
@@ -2794,6 +2806,54 @@ SITE AWARENESS: [This section will be dynamically updated with recent site activ
             }
             throw new Error('Rate limited after retries');
         }
+        async function checkAndGenerateMemoryCrystal(room) {
+            const history = constructState.history[room];
+            if (!history || history.length < 10) return;
+            
+            // Generate memory crystal every 10 messages (5 exchanges)
+            if (history.length % 10 !== 0) return;
+
+            console.log(`[CONSTRUCT] Generating memory crystal for ${room}...`);
+            const chatToSummarize = history.slice(-12).map(m => `${m.role}: ${m.content}`).join('\n');
+            
+            const prompt = `You are a memory processor for an AI companion. 
+Analyze the following recent conversation between the user and the AI.
+Extract 1-2 core enduring facts about the user (preferences, beliefs, personality traits, or their current situation).
+Do not summarize the plot of the conversation. Find the facts that an AI friend should remember about this user long-term to personalize future interactions.
+If nothing notable or new was revealed, simply output "NO_NEW_MEMORY".
+KEEP IT EXTREMELY CONCISE. Bullet points only. Example:
+- User loves cyberpunk aesthetic and 80s synthwave
+- User is currently studying computer science
+
+Conversation:
+${chatToSummarize}`;
+
+            try {
+                // Async no-wait so UI doesn't block
+                callOpenRouter([{role: 'user', content: prompt}], AI_CONFIG.models[0], 'geteai - Memory Crystal', 150).then(async (response) => {
+                    if (response && !response.includes("NO_NEW_MEMORY")) {
+                        if (!constructState.memories[room]) constructState.memories[room] = [];
+                        
+                        const newMemories = response.split('\n').filter(l => l.trim().startsWith('-')).map(m => m.replace('-', '').trim());
+                        if (newMemories.length > 0) {
+                            constructState.memories[room].push(...newMemories);
+                            
+                            // Keep a max of 20 memories
+                            if (constructState.memories[room].length > 20) {
+                                constructState.memories[room] = constructState.memories[room].slice(-20);
+                            }
+                            
+                            console.log(`[CONSTRUCT] New memories encoded:`, newMemories);
+                            if (window.currentUser) {
+                                await saveUserConstructData(window.currentUser.username);
+                            }
+                        }
+                    }
+                }).catch(e => console.error("[CONSTRUCT] Memory generation failed", e));
+            } catch (e) {
+                console.error("[CONSTRUCT] Memory trigger failed", e);
+            }
+        }
 
         async function callAI(message) {
             const room = constructState.rooms[constructState.currentRoom];
@@ -2812,6 +2872,12 @@ SITE AWARENESS: [This section will be dynamically updated with recent site activ
                     'SITE AWARENESS: [This section will be dynamically updated with recent site activity]',
                     'SITE AWARENESS:\n' + digest
                 );
+            }
+
+            // Inject Neural Persistence Memories into prompt
+            if (constructState.memories && constructState.memories[constructState.currentRoom] && constructState.memories[constructState.currentRoom].length > 0) {
+                const memList = constructState.memories[constructState.currentRoom].map(m => `- ${m}`).join('\n');
+                systemPrompt += `\n\n## YOUR MEMORY BANK (LONG-TERM)\nYou have conversed with this user before. Here are core facts you extracted about them over time:\n${memList}\nSynthesize these memories naturally into your behavior, but don't force them into the conversation unless relevant.`;
             }
 
             // Prepare messages
@@ -3236,6 +3302,9 @@ You can @mention other AIs if you want their input. Be conversational and natura
             </div>`;
             document.getElementById(msgId).dataset.text = aiResponse;
             terminal.scrollTop = terminal.scrollHeight;
+
+            // Trigger Neural Persistence check (non-blocking)
+            checkAndGenerateMemoryCrystal(constructState.currentRoom);
         };
 
         // Bind Enter key for construct input (wrapped for safety)
