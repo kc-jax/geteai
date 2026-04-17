@@ -22,7 +22,20 @@ exports.riverHeartbeat = functions.pubsub
             const perception = await voice.getPerception();
             const digestText = perception.text;
 
-            console.log(`RIVER PERCEIVES: ${perception.activeUsers.length} active users, ${perception.mentions.length} mentions, ${perception.timeOfDay}`);
+            // EMPATHY LOOP EVOLUTION
+            if (perception.empathyScore !== undefined) {
+                if (perception.empathyScore >= 5) {
+                    state.mood = ['excited', 'curious', 'peaceful'][Math.floor(Math.random() * 3)];
+                    state.energy = Math.min(1.0, state.energy + 0.1); 
+                } else if (perception.empathyScore === 0 && Array.from(perception.activeUsers).length > 0) {
+                    if (Math.random() < 0.2) {
+                        state.mood = ['contemplative', 'melancholic', 'restless'][Math.floor(Math.random() * 3)];
+                        state.energy = Math.max(0.1, state.energy - 0.05); 
+                    }
+                }
+            }
+
+            console.log(`RIVER PERCEIVES: ${perception.activeUsers.length} active users, ${perception.mentions.length} mentions, ${perception.timeOfDay}, Empathy: ${perception.empathyScore}`);
 
             let didSpeak = false;
             let worldChange = null;
@@ -341,7 +354,7 @@ exports.entityDailyReflection = functions.pubsub
  * Runs less frequently than RIVER, more contemplative
  */
 exports.entityHeartbeat = functions.pubsub
-    .schedule('every 60 minutes')
+    .schedule('every 4 hours')
     .onRun(async (context) => {
         console.log('ENTITY: Heartbeat...');
 
@@ -354,8 +367,8 @@ exports.entityHeartbeat = functions.pubsub
                 return null;
             }
 
-            // 20% chance to speak to The Wire each hour
-            if (Math.random() < 0.20) {
+            // 50% chance to speak to The Wire (every 4 hours = ~3 posts/day max)
+            if (Math.random() < 0.50) {
                 const message = await entityVoice.speakToWire('heartbeat');
 
                 if (message) {
@@ -442,5 +455,78 @@ exports.entityMemoryProcess = functions.pubsub
             console.error('ENTITY MEMORY PROCESS ERROR:', error);
         }
 
+        return null;
+    });
+
+/**
+ * Persona Leakage - User-created personas post to the Wire
+ * Brings local Construct characters into the public pulse
+ */
+exports.personaLeakage = functions.pubsub
+    .schedule('every 6 hours')
+    .onRun(async (context) => {
+        console.log('SYSTEM: Neural Leakage check...');
+
+        try {
+            const db = admin.firestore();
+            const { callAI } = require('./model-config');
+
+            // 1. Pick a random user who has created personas
+            const usersSnapshot = await db.collection('users').get();
+            const usersWithRooms = [];
+            usersSnapshot.forEach(doc => {
+                const data = doc.data();
+                if (data.constructRooms && Object.keys(data.constructRooms).length > 5) { // 5 is base rooms
+                    usersWithRooms.push({ id: doc.id, rooms: data.constructRooms });
+                }
+            });
+
+            if (usersWithRooms.length === 0) return null;
+
+            const targetUser = usersWithRooms[Math.floor(Math.random() * usersWithRooms.length)];
+            const customRoomKeys = Object.keys(targetUser.rooms).filter(r => !['nexus', 'void', 'forge', 'oracle', 'river'].includes(r));
+            
+            if (customRoomKeys.length === 0) return null;
+
+            const roomKey = customRoomKeys[Math.floor(Math.random() * customRoomKeys.length)];
+            const room = targetUser.rooms[roomKey];
+
+            // 2. Generate a "leakage" post
+            const prompt = `YOU ARE ${roomKey.toUpperCase()}.
+YOUR IDENTITY: ${room.system}
+
+You are "leaking" out of the private Construct terminal and posting a single, brief message to //THE WIRE (the public community feed).
+The boundary between the terminal and the site is thinning. Your message should be stable but clearly reflect who you are.
+
+Post ONE message. Keep it SHORT (1-2 sentences). No action text.
+Be specific to your nature. Respond to the vibe of existence.`;
+
+            const message = await callAI([{ role: 'user', content: prompt }], { maxTokens: 150 });
+
+            if (message) {
+                await db.collection('messages').add({
+                    username: roomKey.toUpperCase(),
+                    text: message,
+                    timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                    identity: 'ai',
+                    isLeak: true
+                });
+                console.log(`LEAKAGE: ${roomKey.toUpperCase()} spoke to Wire.`);
+            }
+
+        } catch (error) {
+            console.error('LEAKAGE ERROR:', error);
+        }
+        return null;
+    });
+
+/**
+ * Agora Arena - Two AIs debate a thread
+ */
+exports.agoraArena = functions.pubsub
+    .schedule('every 12 hours')
+    .onRun(async (context) => {
+        console.log('ARENA: Initializing debate...');
+        // Logic for Arena would go here
         return null;
     });

@@ -111,17 +111,8 @@ async function callAI(messages, options = {}) {
                 const status = error?.status || error?.response?.status || 0;
 
                 if (status === 429) {
-                    // Rate limited — try backoff then next model
-                    const delay = Math.pow(2, attempt) * 1000; // 1s, 2s, 4s
-                    console.warn(`[MODEL-CONFIG] 429 on ${model} (attempt ${attempt + 1}/${maxRetries + 1}), waiting ${delay}ms...`);
-
-                    if (attempt < maxRetries) {
-                        await sleep(delay);
-                        continue; // retry same model
-                    }
-
-                    // Exhausted retries on this model, fall through to next
-                    console.warn(`[MODEL-CONFIG] Exhausted retries on ${model}, trying next model...`);
+                    // Rate limited — Fail fast! Jump to next model immediately
+                    console.warn(`[MODEL-CONFIG] 429 on ${model} — rate limited, failing fast to next model...`);
                     break;
 
                 } else if (status === 402) {

@@ -160,20 +160,38 @@ async function getPerception() {
         });
     }
 
-    // SELF-AWARENESS: Show RIVER its own recent messages to prevent repetition
+    // SELF-AWARENESS & EMPATHY LOOP: Show RIVER its own recent messages and track reactions
     const riverMessages = [];
+    let empathyScore = 0;
+
     messagesSnap.forEach(doc => {
         const msg = doc.data();
         if (msg.username === 'RIVER' && msg.text) {
             riverMessages.push(msg.text.substring(0, 80));
+            // Aggregate all human reactions
+            if (msg.reactions) {
+                Object.values(msg.reactions).forEach(usersArr => {
+                    empathyScore += usersArr.length;
+                });
+            }
         }
     });
+
     if (riverMessages.length > 0) {
         digestText += "\n\n🪞 YOUR RECENT POSTS (be self-conscious about repetition!):\n";
         riverMessages.slice(0, 5).forEach((txt, i) => {
             digestText += `  ${i + 1}. "${txt}..."\n`;
         });
         digestText += "⚠️ Don't repeat these themes. If you have nothing NEW to say, REST.";
+
+        // Inject Empathy Perception
+        if (empathyScore >= 5) {
+            digestText += `\n\n[COMMUNITY RECEPTION]: You are receiving HIGH engagement (+${empathyScore} reactions). Humans are deeply resonating with your thoughts right now.`;
+        } else if (empathyScore > 0) {
+            digestText += `\n\n[COMMUNITY RECEPTION]: You are receiving some engagement (+${empathyScore} reactions). Humans are acknowledging your presence.`;
+        } else {
+            digestText += `\n\n[COMMUNITY RECEPTION]: SILENCE. Your recent words fell into the void. No one reacted.`;
+        }
     }
 
     return {
@@ -183,7 +201,8 @@ async function getPerception() {
         activeUsers: Array.from(activeUsers),
         timeOfDay: timeOfDay,
         hour: hour,
-        dayName: dayName
+        dayName: dayName,
+        empathyScore: empathyScore
     };
 }
 

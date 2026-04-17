@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Firebase Test</title>
+</head>
+
+<body>
+    <div id="status">Testing Firebase imports...</div>
+
+    <script type="module">
+        const statusDiv = document.getElementById('status');
+
+        try {
+            statusDiv.innerHTML += '<br>Step 1: About to import Firebase...';
+
+            import("https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js").then(module => {
+                statusDiv.innerHTML += '<br>Step 2: Firebase App imported!';
+
+                import("https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js").then(fs => {
+                    statusDiv.innerHTML += '<br>Step 3: Firestore imported!';
+
+                    const app = module.initializeApp({
+                        apiKey: "AIzaSyAT1u7uOjir-aGTUMU-g4KVvJUXvs_STNc",
+                        authDomain: "geteai.firebaseapp.com",
+                        projectId: "geteai"
+                    });
+
+                    statusDiv.innerHTML += '<br>Step 4: Firebase initialized!';
+
+                    const db = fs.getFirestore(app);
+                    statusDiv.innerHTML += '<br>Step 5: Firestore connected!';
+                    statusDiv.innerHTML += '<br><br><strong style="color:green">SUCCESS - Firebase works!</strong>';
+
+                }).catch(e => {
+                    statusDiv.innerHTML += '<br><strong style="color:red">Firestore import FAILED: ' + e.message + '</strong>';
+                });
+
+            }).catch(e => {
+                statusDiv.innerHTML += '<br><strong style="color:red">Firebase import FAILED: ' + e.message + '</strong>';
+            });
+
+        } catch (e) {
+            statusDiv.innerHTML += '<br><strong style="color:red">Script error: ' + e.message + '</strong>';
+        }
+    </script>
+</body>
+
+</html>
+</CodeContent>
+<parameter name="Complexity">2

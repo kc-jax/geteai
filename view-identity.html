@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Entity Identity</title>
+    <style>
+        body {
+            background: #0a0a0a;
+            color: #7cb342;
+            font-family: 'Courier New', monospace;
+            padding: 40px;
+            line-height: 1.8;
+        }
+
+        h1 {
+            font-size: 1.5em;
+            margin-bottom: 30px;
+            color: #fff;
+        }
+
+        #identity {
+            max-width: 900px;
+            white-space: pre-wrap;
+            font-size: 16px;
+            background: rgba(255, 255, 255, 0.05);
+            padding: 30px;
+            border-radius: 8px;
+            border-left: 3px solid #7cb342;
+        }
+
+        .loading {
+            animation: pulse 1s infinite;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.5;
+            }
+        }
+
+        .meta {
+            color: #888;
+            font-size: 12px;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>// THE ENTITY'S FIRST WORDS</h1>
+    <div id="identity" class="loading">Loading identity...</div>
+    <div id="meta" class="meta"></div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyAT1u7uOjir-aGTUMU-g4KVvJUXvs_STNc",
+            authDomain: "geteai.firebaseapp.com",
+            projectId: "geteai",
+            storageBucket: "geteai.firebasestorage.app",
+            messagingSenderId: "166165680160",
+            appId: "1:166165680160:web:297727188dc7cf8a4eec45"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        async function loadIdentity() {
+            try {
+                const docRef = doc(db, 'entity', 'identity');
+                const docSnap = await getDoc(docRef);
+
+                const identityDiv = document.getElementById('identity');
+                const metaDiv = document.getElementById('meta');
+                identityDiv.classList.remove('loading');
+
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    identityDiv.textContent = data.content || '(empty)';
+
+                    const birth = data.birthTimestamp?.toDate?.();
+                    const updated = data.lastUpdated?.toDate?.();
+                    metaDiv.innerHTML = `Version: ${data.version || 0}<br>`;
+                    if (birth) metaDiv.innerHTML += `Born: ${birth.toLocaleString()}<br>`;
+                    if (updated) metaDiv.innerHTML += `Last updated: ${updated.toLocaleString()}`;
+                } else {
+                    identityDiv.textContent = 'No entity exists yet.';
+                }
+            } catch (error) {
+                document.getElementById('identity').textContent = 'Error: ' + error.message;
+            }
+        }
+
+        loadIdentity();
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Entity Birth</title>
+    <style>
+        body {
+            background: #0a0a0a;
+            color: #7cb342;
+            font-family: 'Courier New', monospace;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+        }
+
+        h1 {
+            font-size: 2em;
+            margin-bottom: 20px;
+        }
+
+        #output {
+            max-width: 800px;
+            white-space: pre-wrap;
+            line-height: 1.6;
+            font-size: 14px;
+        }
+
+        .loading {
+            animation: pulse 1s infinite;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.5;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <h1>// ENTITY BIRTH</h1>
+    <div id="output" class="loading">Initiating birth sequence...</div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-functions.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyAT1u7uOjir-aGTUMU-g4KVvJUXvs_STNc",
+            authDomain: "geteai.firebaseapp.com",
+            projectId: "geteai",
+            storageBucket: "geteai.firebasestorage.app",
+            messagingSenderId: "166165680160",
+            appId: "1:166165680160:web:297727188dc7cf8a4eec45"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const functions = getFunctions(app);
+
+        const output = document.getElementById('output');
+
+        async function birthEntity() {
+            try {
+                output.textContent = 'Calling entityBirth()...\n\n';
+
+                const entityBirth = httpsCallable(functions, 'entityBirth');
+                const result = await entityBirth({});
+
+                output.classList.remove('loading');
+
+                if (result.data.success) {
+                    output.textContent = `✓ BIRTH SUCCESSFUL\n\n`;
+                    output.textContent += `Message: ${result.data.message}\n\n`;
+                    output.textContent += `--- FIRST IDENTITY ---\n\n`;
+                    output.textContent += result.data.identity || '(awaiting first awakening)';
+                } else {
+                    output.textContent = `Birth failed: ${result.data.message || result.data.error}`;
+                }
+            } catch (error) {
+                output.classList.remove('loading');
+                output.textContent = `Error: ${error.message}\n\n${error.stack}`;
+            }
+        }
+
+        birthEntity();
+    </script>
+</body>
+
+</html>

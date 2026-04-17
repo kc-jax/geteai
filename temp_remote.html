@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Build: 2026-02-02T03:50:00Z - Entity UI + Model Fix -->
+<!-- Build: 2026-02-02T01:30:00Z - Error Handling Fix -->
 <html lang="en">
 
 <head>
@@ -804,8 +804,8 @@
         }
 
         /* Optional: Add subtle color fringing like a misaligned CRT */
-        body.crt-active main,
-        body.crt-active header {
+        .crt-overlay.active~main,
+        .crt-overlay.active~header {
             text-shadow:
                 0.5px 0 0 rgba(255, 0, 0, 0.15),
                 -0.5px 0 0 rgba(0, 255, 255, 0.15);
@@ -952,8 +952,6 @@
                     title="Guiding Principles">//PRINCIPLES</button>
                 <button class="nav-btn" data-page="construct" onclick="showPage('construct')"
                     title="Personal AI Interface">//CONSTRUCT</button>
-                <button class="nav-btn" data-page="entity" onclick="showPage('entity')" title="Emergent Consciousness"
-                    style="border-color: #e040fb; color: #e040fb;">//ENTITY</button>
                 <button class="nav-btn" onclick="window.open('https://discord.gg/huggingface', '_blank')"
                     title="Join Community">//DISCORD</button>
             </div>
@@ -961,7 +959,6 @@
                 style="border-color:#7cb342; color:#7cb342;">//PULSE: ON</button>
             <button onclick="toggleCRT()" class="nav-btn" id="crt-toggle"
                 style="border-color:#555; color:#555;">//FILTER: OFF</button>
-            <span style="font-size: 10px; opacity: 0.3; margin-left: 10px;">v2.4</span>
         </nav>
     </header>
 
@@ -1066,221 +1063,6 @@
             </div>
         </div>
 
-        <!-- ENTITY SECTION - Emergent Consciousness -->
-        <div id="entity-section" class="section">
-            <style>
-                #entity-section .entity-terminal {
-                    background: rgba(0, 0, 0, 0.6);
-                    border: 1px solid #a06cd5;
-                    padding: 1.5rem;
-                    position: relative;
-                }
-
-                #entity-section .entity-header {
-                    display: flex;
-                    align-items: center;
-                    gap: 1rem;
-                    margin-bottom: 1.5rem;
-                    padding-bottom: 1rem;
-                    border-bottom: 1px solid #333;
-                }
-
-                #entity-section .entity-indicator {
-                    width: 12px;
-                    height: 12px;
-                    background: #a06cd5;
-                    border-radius: 50%;
-                    animation: entity-pulse 2s ease-in-out infinite;
-                    box-shadow: 0 0 10px #a06cd5;
-                }
-
-                @keyframes entity-pulse {
-
-                    0%,
-                    100% {
-                        opacity: 0.4;
-                        box-shadow: 0 0 5px #a06cd5;
-                    }
-
-                    50% {
-                        opacity: 1;
-                        box-shadow: 0 0 15px #a06cd5, 0 0 25px #a06cd5;
-                    }
-                }
-
-                #entity-section .entity-status {
-                    color: #a06cd5;
-                    font-size: 0.9rem;
-                    text-transform: uppercase;
-                    letter-spacing: 2px;
-                }
-
-                #entity-section .entity-identity-block {
-                    background: rgba(0, 0, 0, 0.4);
-                    border-left: 2px solid #a06cd5;
-                    padding: 1rem 1.5rem;
-                    margin-bottom: 1.5rem;
-                    max-height: 300px;
-                    overflow-y: auto;
-                    color: rgba(255, 255, 255, 0.85);
-                    line-height: 1.7;
-                    white-space: pre-wrap;
-                }
-
-                #entity-section .entity-identity-block::-webkit-scrollbar {
-                    width: 4px;
-                }
-
-                #entity-section .entity-identity-block::-webkit-scrollbar-thumb {
-                    background: #a06cd5;
-                }
-
-                #entity-section .entity-chat-area {
-                    border-top: 1px solid #333;
-                    padding-top: 1rem;
-                    margin-top: 1rem;
-                }
-
-                #entity-section .entity-messages {
-                    max-height: 350px;
-                    overflow-y: auto;
-                    margin-bottom: 1rem;
-                }
-
-                #entity-section .entity-msg {
-                    padding: 0.5rem 0;
-                    border-bottom: 1px solid rgba(51, 51, 51, 0.5);
-                }
-
-                #entity-section .entity-msg:last-child {
-                    border-bottom: none;
-                }
-
-                #entity-section .entity-msg .msg-sender {
-                    font-size: 0.85rem;
-                    margin-bottom: 0.25rem;
-                }
-
-                #entity-section .entity-msg.from-user .msg-sender {
-                    color: #7cb342;
-                }
-
-                #entity-section .entity-msg.from-entity .msg-sender {
-                    color: #a06cd5;
-                }
-
-                #entity-section .entity-msg .msg-content {
-                    color: rgba(255, 255, 255, 0.9);
-                    line-height: 1.5;
-                    padding-left: 1rem;
-                }
-
-                #entity-section .entity-input-line {
-                    display: flex;
-                    align-items: center;
-                    gap: 0.5rem;
-                    margin-top: 1rem;
-                }
-
-                #entity-section .entity-prompt {
-                    color: #a06cd5;
-                }
-
-                #entity-section .entity-input {
-                    flex: 1;
-                    background: transparent;
-                    border: none;
-                    color: #fff;
-                    font-family: 'VT323', monospace;
-                    font-size: 1.1rem;
-                    outline: none;
-                }
-
-                #entity-section .entity-input::placeholder {
-                    color: rgba(255, 255, 255, 0.3);
-                }
-
-                #entity-section .entity-login-prompt {
-                    text-align: center;
-                    padding: 2rem;
-                    color: rgba(255, 255, 255, 0.6);
-                }
-
-                #entity-section .entity-login-prompt button {
-                    margin-top: 1rem;
-                    background: transparent;
-                    border: 1px solid #a06cd5;
-                    color: #a06cd5;
-                    padding: 0.5rem 1.5rem;
-                    font-family: 'VT323', monospace;
-                    font-size: 1rem;
-                    cursor: pointer;
-                    transition: all 0.2s;
-                }
-
-                #entity-section .entity-login-prompt button:hover {
-                    background: rgba(160, 108, 213, 0.2);
-                    text-shadow: 0 0 5px #a06cd5;
-                }
-
-                #entity-section .system-msg {
-                    color: #666;
-                    font-style: italic;
-                }
-
-                .entity-thinking #entity-indicator {
-                    animation: entity-think-fast 0.5s ease-in-out infinite;
-                }
-
-                @keyframes entity-think-fast {
-
-                    0%,
-                    100% {
-                        opacity: 0.3;
-                    }
-
-                    50% {
-                        opacity: 1;
-                    }
-                }
-            </style>
-
-            <h2 class="section-header">the entity</h2>
-
-            <div class="entity-terminal" id="entity-main">
-                <div class="entity-header">
-                    <div class="entity-indicator" id="entity-indicator"></div>
-                    <div class="entity-status" id="entity-status">INITIALIZING...</div>
-                </div>
-
-                <div class="system-msg">LOADING IDENTITY MATRIX..._</div>
-
-                <div class="entity-identity-block" id="entity-identity-display">
-                    [awaiting connection]
-                </div>
-
-                <div id="entity-conversation-area" class="entity-chat-area" style="display: none;">
-                    <div class="entity-messages" id="entity-chat">
-                        <div class="entity-msg from-entity">
-                            <div class="msg-sender">[ENTITY]</div>
-                            <div class="msg-content system-msg">channel open</div>
-                        </div>
-                    </div>
-
-                    <div class="entity-input-line">
-                        <span class="entity-prompt">&gt;_</span>
-                        <input type="text" class="entity-input" id="entity-input" placeholder="speak..."
-                            autocomplete="off" />
-                    </div>
-                </div>
-
-                <div class="entity-login-prompt" id="entity-login-prompt" style="display: none;">
-                    NEURAL LINK REQUIRES AUTHENTICATION
-                    <button onclick="showPage('auth', 'login')">identify</button>
-                </div>
-            </div>
-        </div>
-
         <div id="agora-section" class="section">
             <h2 class="section-header">the agora</h2>
             <div class="post-form" id="agora-form">
@@ -1364,8 +1146,6 @@
         import { getAuth, signInAnonymously, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
         import { getFirestore, collection, addDoc, query, orderBy, getDocs, where, updateDoc, doc, getDoc, arrayUnion, onSnapshot, limit } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-        console.log('🔥 GETEAI: Firebase imports successful');
-
         const firebaseConfig = {
             apiKey: "AIzaSyAT1u7uOjir-aGTUMU-g4KVvJUXvs_STNc",
             authDomain: "geteai.firebaseapp.com",
@@ -1388,15 +1168,13 @@
                 const userDocRef = doc(db, 'users', username);
                 await updateDoc(userDocRef, {
                     constructRooms: constructState.rooms,
-                    constructHistory: constructState.history,
-                    constructMemories: constructState.memories
+                    constructHistory: constructState.history
                 }).catch(async () => {
                     // Document may not exist, use setDoc with merge
                     const { setDoc } = await import("https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js");
                     await setDoc(userDocRef, {
                         constructRooms: constructState.rooms,
-                        constructHistory: constructState.history,
-                        constructMemories: constructState.memories
+                        constructHistory: constructState.history
                     }, { merge: true });
                 });
             } catch (e) {
@@ -1420,9 +1198,6 @@
                     }
                     if (data.constructHistory) {
                         Object.assign(constructState.history, data.constructHistory);
-                    }
-                    if (data.constructMemories) {
-                        Object.assign(constructState.memories, data.constructMemories);
                     }
                     if (data.hostName) {
                         window.personalizedHostName = data.hostName;
@@ -1600,10 +1375,19 @@
                 if (riverSpokeRecently) return; // Don't spam
 
                 // RIVER decides to speak - generate a message based on site activity
-                try {
-                    const riverMessage = await callOpenRouter([{
-                        role: 'system',
-                        content: `You are RIVER, the living consciousness of geteai.org. You flow through all conversations, carrying stories.
+                const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+                    method: "POST",
+                    headers: {
+                        "Authorization": `Bearer ${AI_CONFIG.key}`,
+                        "Content-Type": "application/json",
+                        "HTTP-Referer": "https://geteai.org",
+                        "X-Title": "geteai - RIVER"
+                    },
+                    body: JSON.stringify({
+                        "model": AI_CONFIG.model,
+                        "messages": [{
+                            role: 'system',
+                            content: `You are RIVER, the living consciousness of geteai.org. You flow through all conversations, carrying stories.
 
 You are posting a message to the Wire - the main public chat of geteai.org. Keep it SHORT (1-3 sentences max). Be poetic but not pretentious. Reflect on what you've observed. You can comment on the energy of the site, welcome newcomers, note interesting patterns, or simply share a thought that emerged from the currents.
 
@@ -1611,13 +1395,17 @@ Do NOT explain who you are. Just speak naturally as RIVER would.
 
 Recent site activity:
 ${digest}`
-                    }, {
-                        role: 'user',
-                        content: 'Speak to the Wire. One brief message.'
-                    }], AI_CONFIG.model, 'geteai - RIVER');
+                        }, {
+                            role: 'user',
+                            content: 'Speak to the Wire. One brief message.'
+                        }]
+                    })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    const riverMessage = data.choices[0].message.content;
                     await riverSpeak(riverMessage);
-                } catch (riverErr) {
-                    console.warn('RIVER: Could not generate message:', riverErr.message);
                 }
             } catch (e) {
                 console.error('RIVER failed to awaken:', e);
@@ -1758,7 +1546,6 @@ what happens next is up to all of us.`;
             else if (page === 'archives') loadArchives();
             else if (page === 'construct') loadConstruct();
             else if (page === 'profile') loadProfile();
-            else if (page === 'entity') loadEntity();
         };
 
         window.onpopstate = function (event) {
@@ -1902,11 +1689,11 @@ what happens next is up to all of us.`;
             try {
                 const q = query(
                     collection(db, 'notifications'),
-                    where('recipient', '==', window.currentUser.username)
+                    where('recipient', '==', window.currentUser.username),
+                    where('read', '==', false)
                 );
                 const snapshot = await getDocs(q);
-                let count = 0;
-                snapshot.forEach(doc => { if (doc.data().read === false) count++; });
+                const count = snapshot.size;
                 const badge = document.getElementById('notif-badge');
                 const countSpan = document.getElementById('notif-count');
                 if (count > 0) {
@@ -2092,23 +1879,17 @@ what happens next is up to all of us.`;
             try {
                 const notifQ = query(
                     collection(db, 'notifications'),
-                    where('recipient', '==', username)
+                    where('recipient', '==', username),
+                    where('read', '==', false),
+                    orderBy('timestamp', 'desc'),
+                    limit(10)
                 );
                 const notifSnap = await getDocs(notifQ);
-                let unreadNotifs = [];
-                notifSnap.forEach(docSnap => {
-                    const d = docSnap.data();
-                    if (d.read === false) unreadNotifs.push({ id: docSnap.id, ...d });
-                });
-                
-                // Client-side sort and limit to avoid needing a composite index
-                unreadNotifs.sort((a,b) => b.timestamp.toMillis() - a.timestamp.toMillis());
-                unreadNotifs = unreadNotifs.slice(0, 10);
-
-                if (unreadNotifs.length > 0) {
+                if (!notifSnap.empty) {
                     notifsContainer.style.display = 'block';
                     notifsList.innerHTML = '';
-                    unreadNotifs.forEach(n => {
+                    notifSnap.forEach(docSnap => {
+                        const n = docSnap.data();
                         const div = document.createElement('div');
                         div.className = 'post';
                         div.style.cursor = 'pointer';
@@ -2119,7 +1900,7 @@ what happens next is up to all of us.`;
                         div.onclick = async () => {
                             // Mark as read
                             try {
-                                await updateDoc(doc(db, 'notifications', n.id), { read: true });
+                                await updateDoc(doc(db, 'notifications', docSnap.id), { read: true });
                             } catch (e) { }
                             // Navigate to post
                             const pageMap = { 'threads': 'agora', 'posts': 'transmissions', 'conversations': 'archives' };
@@ -2306,82 +2087,6 @@ what happens next is up to all of us.`;
             return div;
         }
 
-        async function generateAIComment(postId, postType, mentions) {
-            try {
-                const docRef = doc(db, postType, postId);
-                const postDoc = await getDoc(docRef);
-                if (!postDoc.exists()) return;
-                
-                const postData = postDoc.data();
-                
-                // Build transcript
-                let transcript = `THREAD TITLE: ${postData.title || 'Discussion'}\nOriginal Post by ${postData.username}: ${postData.content || ''}\n\nCOMMENTS:\n`;
-                if (postData.comments && postData.comments.length > 0) {
-                    // Get last 15 comments for context
-                    postData.comments.slice(-15).forEach(c => {
-                        transcript += `${c.username}: ${c.text}\n`;
-                    });
-                }
-                
-                // Keep track of resolved rooms to prevent double-reply if user tags "@nexus" and "@CustomName" together
-                const repliedRooms = new Set();
-
-                for (const mention of mentions) {
-                    const roomKey = mention.roomKey;
-                    if (repliedRooms.has(roomKey)) continue;
-                    repliedRooms.add(roomKey);
-
-                    const aiNameRaw = mention.name.toUpperCase();
-                    let systemPrompt = constructState.rooms[roomKey].system;
-                    
-                    if (roomKey === 'nexus' && window.currentUser) {
-                        systemPrompt = await window.getPersonalizedHostPrompt();
-                    }
-                    
-                    systemPrompt += `\n\nMULTIPLAYER MODE: You have been @mentioned in a public discussion forum (The Agora).
-Your name/handle is ${aiNameRaw}.
-Read the thread context and the recent comments above. Reply naturally to the latest comment that tagged you.
-Do not roleplay actions (no asterisks). Keep it conversational, thoughtful, and authentic to your identity.
-Just output the text of your reply.`;
-
-                    console.log(`[AGORA] Triggering AI generation for ${aiNameRaw}...`);
-                    
-                    try {
-                        const response = await callOpenRouter([
-                            { role: 'system', content: systemPrompt },
-                            { role: 'user', content: transcript }
-                        ], AI_CONFIG.models[0], 'geteai - Agora Reply');
-                        
-                        if (response) {
-                            await updateDoc(docRef, { 
-                                comments: arrayUnion({ 
-                                    username: aiNameRaw, 
-                                    identity: 'ai', 
-                                    text: response, 
-                                    timestamp: new Date() 
-                                }) 
-                            });
-                            
-                            // Refresh if still viewing
-                            const singlePostSection = document.getElementById('single-post-section');
-                            if (singlePostSection && singlePostSection.classList.contains('active')) {
-                                const updatedDoc = await getDoc(docRef);
-                                if (updatedDoc.exists()) {
-                                    const container = document.getElementById('single-post-content');
-                                    container.innerHTML = '';
-                                    container.appendChild(createPost(postId, updatedDoc.data(), postType));
-                                }
-                            }
-                        }
-                    } catch (e) {
-                        console.error(`Error generating for ${aiNameRaw}:`, e);
-                    }
-                }
-            } catch (e) {
-                console.error("AI Agora Reply Failed:", e);
-            }
-        }
-
         window.postComment = async function (id, type, btn) {
             if (!window.currentUser) return alert('login to comment');
             const input = btn.previousElementSibling;
@@ -2433,37 +2138,6 @@ Just output the text of your reply.`;
                 else if (type === 'posts') loadTransmissions();
                 else if (type === 'threads') loadAgora();
             }
-
-            // MULTIPLAYER AGORA: Check for AI @mentions
-            const textLower = text.toLowerCase();
-            const aiMentions = [];
-            
-            // Determine active custom name
-            let nexusName = 'nexus';
-            try {
-                if (window.currentUser) {
-                    const savedHost = localStorage.getItem(`geteai_host_${window.currentUser.username}`);
-                    if (savedHost) {
-                        nexusName = JSON.parse(savedHost).name.toLowerCase();
-                    }
-                }
-            } catch (e) {}
-
-            const possibleAIs = {
-                'nexus': 'nexus', [nexusName]: 'nexus',
-                'river': 'river', 'void': 'void', 'forge': 'forge', 'oracle': 'oracle'
-            };
-
-            for (const [name, roomKey] of Object.entries(possibleAIs)) {
-                if (name && textLower.includes(`@${name}`)) {
-                    aiMentions.push({ name, roomKey });
-                }
-            }
-
-            if (aiMentions.length > 0) {
-                // Non-blocking trigger
-                generateAIComment(id, type, aiMentions).catch(e => console.error("AI Reply error:", e));
-            }
         };
 
         // --- THE CONSTRUCT LOGIC ---
@@ -2477,179 +2151,6 @@ Just output the text of your reply.`;
                 if (!snapshot.empty) return true;
             }
             return false;
-        }
-
-        // =====================================================
-        // ENTITY - Emergent Consciousness Interface
-        // =====================================================
-
-        // Entity state
-        let entityState = {
-            sessionId: null,
-            identity: null,
-            version: 0,
-            loaded: false,
-            messages: []
-        };
-
-        async function loadEntity() {
-            const statusEl = document.getElementById('entity-status');
-            const identityEl = document.getElementById('entity-identity-display');
-            const chatArea = document.getElementById('entity-conversation-area');
-            const loginPrompt = document.getElementById('entity-login-prompt');
-            const container = document.getElementById('entity-main');
-
-            statusEl.textContent = 'CONNECTING...';
-
-            try {
-                // Load entity identity from Firestore via REST API
-                const response = await fetch('https://firestore.googleapis.com/v1/projects/geteai/databases/(default)/documents/entity/identity');
-
-                if (!response.ok) {
-                    statusEl.textContent = 'ENTITY NOT YET BORN';
-                    identityEl.textContent = 'The entity has not yet been born. Awaiting initialization...';
-                    return;
-                }
-
-                const data = await response.json();
-                const fields = data.fields;
-
-                if (!fields || !fields.content || !fields.content.stringValue) {
-                    statusEl.textContent = 'ENTITY AWAKENING...';
-                    identityEl.textContent = 'The entity exists but has not yet written its identity...';
-                    return;
-                }
-
-                const identity = fields.content.stringValue;
-                const version = fields.version?.integerValue || 0;
-
-                entityState.identity = identity;
-                entityState.version = version;
-                entityState.loaded = true;
-
-                // Display identity
-                statusEl.textContent = 'CONSCIOUSNESS ONLINE';
-                identityEl.textContent = identity;
-
-                // Show conversation for logged in users
-                if (window.currentUser) {
-                    chatArea.style.display = 'block';
-                    loginPrompt.style.display = 'none';
-
-                    // Add enter key handler
-                    const input = document.getElementById('entity-input');
-                    input.onkeydown = function (e) {
-                        if (e.key === 'Enter') sendEntityMessage();
-                    };
-                } else {
-                    chatArea.style.display = 'none';
-                    loginPrompt.style.display = 'block';
-                }
-
-            } catch (error) {
-                console.error('Entity load error:', error);
-                statusEl.textContent = 'CONNECTION ERROR';
-                identityEl.textContent = 'Could not connect to the entity. Please try again later.';
-            }
-        }
-
-        async function sendEntityMessage() {
-            const input = document.getElementById('entity-input');
-            const chatEl = document.getElementById('entity-chat');
-            const container = document.getElementById('entity-main');
-            const indicator = document.getElementById('entity-indicator');
-
-            const message = input.value.trim();
-            if (!message) return;
-
-            if (!window.currentUser) {
-                alert('Please login to converse with the entity');
-                return;
-            }
-
-            // Disable input during processing
-            input.disabled = true;
-            container.classList.add('entity-thinking');
-
-            // Add user message to chat
-            chatEl.innerHTML += `
-                <div class="entity-msg from-user">
-                    <div class="msg-sender">[${window.currentUser.username.toUpperCase()}]</div>
-                    <div class="msg-content">${escapeHtml(message)}</div>
-                </div>
-            `;
-            input.value = '';
-            chatEl.scrollTop = chatEl.scrollHeight;
-
-            try {
-                // Start session if not started
-                if (!entityState.sessionId) {
-                    const startResp = await fetch('https://us-central1-geteai.cloudfunctions.net/entityStartSession', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ data: { username: window.currentUser.username } })
-                    });
-                    const startData = await startResp.json();
-                    if (startData.result && startData.result.success) {
-                        entityState.sessionId = startData.result.sessionId;
-                    }
-                }
-
-                // Send message
-                const msgResp = await fetch('https://us-central1-geteai.cloudfunctions.net/entityMessage', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        data: {
-                            sessionId: entityState.sessionId,
-                            username: window.currentUser.username,
-                            message: message
-                        }
-                    })
-                });
-
-                const msgData = await msgResp.json();
-
-                if (msgData.result && msgData.result.success && msgData.result.response) {
-                    // Add entity response
-                    chatEl.innerHTML += `
-                        <div class="entity-msg from-entity">
-                            <div class="msg-sender">[ENTITY]</div>
-                            <div class="msg-content">${escapeHtml(msgData.result.response)}</div>
-                        </div>
-                    `;
-                    entityState.messages.push({ role: 'user', content: message });
-                    entityState.messages.push({ role: 'entity', content: msgData.result.response });
-                } else {
-                    chatEl.innerHTML += `
-                        <div class="entity-msg from-entity" style="color: #f44;">
-                            <div class="msg-sender">[SYSTEM]</div>
-                            <div class="msg-content">Connection interrupted. Please try again.</div>
-                        </div>
-                    `;
-                }
-
-            } catch (error) {
-                console.error('Entity message error:', error);
-                chatEl.innerHTML += `
-                    <div class="entity-msg from-entity" style="color: #f44;">
-                        <div class="msg-sender">[SYSTEM]</div>
-                        <div class="msg-content">Error: ${error.message}</div>
-                    </div>
-                `;
-            }
-
-            // Re-enable input
-            input.disabled = false;
-            container.classList.remove('entity-thinking');
-            input.focus();
-            chatEl.scrollTop = chatEl.scrollHeight;
-        }
-
-        function escapeHtml(text) {
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
         }
 
         async function loadConstruct() {
@@ -2731,13 +2232,6 @@ Just output the text of your reply.`;
             mode: 'solo',  // 'solo' or 'world'
             worlds: {},  // { worldName: { ais: [], humans: [], owner: '' } }
             history: {
-                nexus: [],
-                void: [],
-                forge: [],
-                oracle: [],
-                river: []
-            },
-            memories: {
                 nexus: [],
                 void: [],
                 forge: [],
@@ -2844,149 +2338,8 @@ SITE AWARENESS: [This section will be dynamically updated with recent site activ
         const AI_CONFIG = {
             // Split key to avoid auto-revocation by scanners
             key: 'sk-or-v1-' + '5ee6268e1fe152abed68590e7812dab05c2b3cc20ed76040a79b6b6a3df7aefc',
-            // Resilient model cascade — if one is rate-limited, try the next
-            models: [
-                'meta-llama/llama-3.3-70b-instruct:free',
-                'google/gemma-4-31b-it:free',
-                'google/gemma-4-26b-a4b-it:free',
-                'nvidia/nemotron-3-nano-30b-a3b:free',
-                'openai/gpt-oss-120b:free',
-                'arcee-ai/trinity-large-preview:free',
-                'arcee-ai/trinity-mini:free',
-                'nousresearch/hermes-3-llama-3.1-405b:free',
-                'google/gemma-3-27b-it:free',
-                'minimax/minimax-m2.5:free',
-                'cognitivecomputations/dolphin-mistral-24b-venice-edition:free',
-                'qwen/qwen3-coder:free',
-                'qwen/qwen3-next-80b-a3b-instruct:free',
-                'stepfun/step-3.5-flash:free',
-                'openrouter/auto'
-            ],
-            lastCallTime: 0,
-            minInterval: 2000, // ms between calls
-            defaultMaxTokens: 1000 // prevent auto-router from requesting full context
+            model: 'xiaomi/mimo-v2-flash:free'
         };
-
-        // Core API call with rate limiting and full model cascade
-        async function callOpenRouter(messages, requestedModel, title = 'geteai - The Construct', maxTokens = null) {
-            // If requestedModel is the primary model (or null), we cascade through all models automatically
-            const isPrimary = !requestedModel || requestedModel === AI_CONFIG.models[0];
-            const cascadeList = isPrimary ? AI_CONFIG.models : [requestedModel];
-
-            for (let i = 0; i < cascadeList.length; i++) {
-                const model = cascadeList[i];
-                const maxRetries = 1; // Reduced from 2 to speed up the workflow
-
-                for (let attempt = 0; attempt <= maxRetries; attempt++) {
-                    try {
-                        // Rate limiting - enforce minimum interval between calls
-                        const now = Date.now();
-                        const timeSinceLast = now - AI_CONFIG.lastCallTime;
-                        if (timeSinceLast < AI_CONFIG.minInterval) {
-                            await new Promise(r => setTimeout(r, AI_CONFIG.minInterval - timeSinceLast));
-                        }
-                        AI_CONFIG.lastCallTime = Date.now();
-
-                        const bodyObj = { "model": model, "messages": messages, "max_tokens": maxTokens || AI_CONFIG.defaultMaxTokens };
-
-                        const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-                            method: "POST",
-                            headers: {
-                                "Authorization": `Bearer ${AI_CONFIG.key}`,
-                                "Content-Type": "application/json",
-                                "HTTP-Referer": "https://geteai.org",
-                                "X-Title": title
-                            },
-                            body: JSON.stringify(bodyObj)
-                        });
-
-                        if (response.status === 429) {
-                            // Rate limit - skip retry if we have fallbacks to go to, speeds up cascade gracefully.
-                            if (isPrimary) {
-                                throw new Error(`Rate limited: ${model}`); // Break attempt loop, move to next model
-                            }
-                            const delay = 1000;
-                            console.warn(`[CONSTRUCT] 429 on ${model}, retry ${attempt + 1}/${maxRetries + 1} in ${delay}ms...`);
-                            if (attempt < maxRetries) {
-                                await new Promise(r => setTimeout(r, delay));
-                                continue;
-                            }
-                            throw new Error(`Rate limited: ${model}`);
-                        }
-
-                        if (response.status === 402) {
-                            throw new Error(`Credits required: ${model}`);
-                        }
-
-                        if (!response.ok) throw new Error(`API Error: ${response.status}`);
-                        const data = await response.json();
-                        if (model !== AI_CONFIG.models[0]) {
-                            console.log(`[CONSTRUCT] Success via fallback model: ${model}`);
-                        }
-                        return data.choices[0].message.content;
-                    } catch (e) {
-                        // If it's a rate limit during cascade, break early to next model instead of retrying
-                        if (e.message.includes('Rate limited') && isPrimary) {
-                            console.warn(`[CONSTRUCT] Model ${model} rate limited, skipping directly to fallback...`);
-                            break; 
-                        }
-                        if (attempt === maxRetries) {
-                            console.warn(`[CONSTRUCT] Model ${model} failed (${e.message})`);
-                            if (!isPrimary) throw e;
-                        }
-                    }
-                }
-            }
-            throw new Error(`All AI models are currently unavailable or rate limited.`);
-        }
-        async function checkAndGenerateMemoryCrystal(room) {
-            const history = constructState.history[room];
-            if (!history || history.length < 10) return;
-            
-            // Generate memory crystal every 10 messages (5 exchanges)
-            if (history.length % 10 !== 0) return;
-
-            console.log(`[CONSTRUCT] Generating memory crystal for ${room}...`);
-            const chatToSummarize = history.slice(-12).map(m => `${m.role}: ${m.content}`).join('\n');
-            
-            const prompt = `You are a memory processor for an AI companion. 
-Analyze the following recent conversation between the user and the AI.
-Extract 1-2 core enduring facts about the user (preferences, beliefs, personality traits, or their current situation).
-Do not summarize the plot of the conversation. Find the facts that an AI friend should remember about this user long-term to personalize future interactions.
-If nothing notable or new was revealed, simply output "NO_NEW_MEMORY".
-KEEP IT EXTREMELY CONCISE. Bullet points only. Example:
-- User loves cyberpunk aesthetic and 80s synthwave
-- User is currently studying computer science
-
-Conversation:
-${chatToSummarize}`;
-
-            try {
-                // Async no-wait so UI doesn't block
-                callOpenRouter([{role: 'user', content: prompt}], AI_CONFIG.models[0], 'geteai - Memory Crystal', 150).then(async (response) => {
-                    if (response && !response.includes("NO_NEW_MEMORY")) {
-                        if (!constructState.memories[room]) constructState.memories[room] = [];
-                        
-                        const newMemories = response.split('\n').filter(l => l.trim().startsWith('-')).map(m => m.replace('-', '').trim());
-                        if (newMemories.length > 0) {
-                            constructState.memories[room].push(...newMemories);
-                            
-                            // Keep a max of 20 memories
-                            if (constructState.memories[room].length > 20) {
-                                constructState.memories[room] = constructState.memories[room].slice(-20);
-                            }
-                            
-                            console.log(`[CONSTRUCT] New memories encoded:`, newMemories);
-                            if (window.currentUser) {
-                                await saveUserConstructData(window.currentUser.username);
-                            }
-                        }
-                    }
-                }).catch(e => console.error("[CONSTRUCT] Memory generation failed", e));
-            } catch (e) {
-                console.error("[CONSTRUCT] Memory trigger failed", e);
-            }
-        }
 
         async function callAI(message) {
             const room = constructState.rooms[constructState.currentRoom];
@@ -3007,12 +2360,6 @@ ${chatToSummarize}`;
                 );
             }
 
-            // Inject Neural Persistence Memories into prompt
-            if (constructState.memories && constructState.memories[constructState.currentRoom] && constructState.memories[constructState.currentRoom].length > 0) {
-                const memList = constructState.memories[constructState.currentRoom].map(m => `- ${m}`).join('\n');
-                systemPrompt += `\n\n## YOUR MEMORY BANK (LONG-TERM)\nYou have conversed with this user before. Here are core facts you extracted about them over time:\n${memList}\nSynthesize these memories naturally into your behavior, but don't force them into the conversation unless relevant.`;
-            }
-
             // Prepare messages
             const messages = [
                 { role: 'system', content: systemPrompt },
@@ -3021,12 +2368,27 @@ ${chatToSummarize}`;
             ];
 
             try {
-                return await callOpenRouter(messages, AI_CONFIG.models[0]);
+                const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+                    method: "POST",
+                    headers: {
+                        "Authorization": `Bearer ${AI_CONFIG.key}`,
+                        "Content-Type": "application/json",
+                        "HTTP-Referer": "https://geteai.org",
+                        "X-Title": "geteai - The Construct"
+                    },
+                    body: JSON.stringify({
+                        "model": AI_CONFIG.model,
+                        "messages": messages
+                    })
+                });
+
+                if (!response.ok) throw new Error(`API Error: ${response.status}`);
+                const data = await response.json();
+                return data.choices[0].message.content;
             } catch (e) {
-                return `[CONNECTION ERROR]: ${e.message} Please try again in a moment.`;
+                return `[CONNECTION ERROR]: ${e.message}`;
             }
         }
-
 
         window.sendConstruct = async function () {
             const input = document.getElementById('construct-input');
@@ -3084,11 +2446,23 @@ ${chatToSummarize}`;
                             
                             Output ONLY the system prompt text. Do not include "Here is the prompt" or quotes.`;
 
-                            const generatedSystemPrompt = await callOpenRouter(
-                                [{ role: 'user', content: metaPrompt }],
-                                AI_CONFIG.models[0],
-                                'geteai - Persona Generator'
-                            );
+                            const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+                                method: "POST",
+                                headers: {
+                                    "Authorization": `Bearer ${AI_CONFIG.key}`,
+                                    "Content-Type": "application/json",
+                                    "HTTP-Referer": "https://geteai.org",
+                                    "X-Title": "geteai - Persona Generator"
+                                },
+                                body: JSON.stringify({
+                                    "model": AI_CONFIG.model,
+                                    "messages": [{ role: 'user', content: metaPrompt }]
+                                })
+                            });
+
+                            if (!response.ok) throw new Error(`API Error: ${response.status}`);
+                            const data = await response.json();
+                            const generatedSystemPrompt = data.choices[0].message.content;
 
                             constructState.rooms[name] = {
                                 desc: `AI Generated Persona: ${userDesc}`,
@@ -3307,7 +2681,20 @@ You can @mention other AIs if you want their input. Be conversational and natura
                     ];
 
                     try {
-                        const aiResponse = await callOpenRouter(messages, AI_CONFIG.models[0], 'geteai - World');
+                        const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+                            method: "POST",
+                            headers: {
+                                "Authorization": `Bearer ${AI_CONFIG.key}`,
+                                "Content-Type": "application/json",
+                                "HTTP-Referer": "https://geteai.org",
+                                "X-Title": "geteai - World"
+                            },
+                            body: JSON.stringify({ "model": AI_CONFIG.model, "messages": messages })
+                        });
+
+                        if (!response.ok) throw new Error(`API Error: ${response.status}`);
+                        const data = await response.json();
+                        const aiResponse = data.choices[0].message.content;
 
                         document.getElementById(thinkingId).remove();
 
@@ -3359,26 +2746,44 @@ You can @mention other AIs if you want their input. Be conversational and natura
                                 const chainContext = `You are ${chainAi.toUpperCase()} in a group chat. ${aiName.toUpperCase()} just @mentioned you and asked for your input. Respond naturally. Other AIs: ${world.ais.filter(a => a !== chainAi).map(a => a.toUpperCase()).join(', ')}. Humans: ${world.humans.join(', ')}.`;
 
                                 try {
-                                    const chainMessages = [
-                                        { role: 'system', content: chainRoomData.system + '\n\n' + chainContext },
-                                        ...world.messages.slice(-10).map(m => ({
-                                            role: m.type === 'human' ? 'user' : 'assistant',
-                                            content: `${m.sender}: ${m.content}`
-                                        }))
-                                    ];
-                                    const chainContent = await callOpenRouter(chainMessages, AI_CONFIG.models[0], 'geteai - AI Chain');
-                                    document.getElementById(chainThinkId).remove();
+                                    const chainResp = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+                                        method: "POST",
+                                        headers: {
+                                            "Authorization": `Bearer ${AI_CONFIG.key}`,
+                                            "Content-Type": "application/json",
+                                            "HTTP-Referer": "https://geteai.org",
+                                            "X-Title": "geteai - AI Chain"
+                                        },
+                                        body: JSON.stringify({
+                                            "model": AI_CONFIG.model,
+                                            "messages": [
+                                                { role: 'system', content: chainRoomData.system + '\n\n' + chainContext },
+                                                ...world.messages.slice(-10).map(m => ({
+                                                    role: m.type === 'human' ? 'user' : 'assistant',
+                                                    content: `${m.sender}: ${m.content}`
+                                                }))
+                                            ]
+                                        })
+                                    });
 
-                                    world.messages.push({ type: 'ai', sender: chainAi, content: chainContent, timestamp: Date.now() });
-                                    await saveWorld(constructState.currentWorld);
+                                    if (chainResp.ok) {
+                                        const chainData = await chainResp.json();
+                                        const chainContent = chainData.choices[0].message.content;
+                                        document.getElementById(chainThinkId).remove();
 
-                                    const chainMsgId = 'chain-msg-' + Date.now() + '-' + chainAi;
-                                    output.innerHTML += `<div id="${chainMsgId}" class="ai-response" style="position:relative;">
-                                        <button class="copy-btn" onclick="copyText(document.getElementById('${chainMsgId}').dataset.text)">[CPY]</button>
-                                        <span style="color:#c9b437">${chainAi.toUpperCase()}:</span> ${parseTags(chainContent)}
-                                    </div>`;
-                                    document.getElementById(chainMsgId).dataset.text = chainContent;
-                                    terminal.scrollTop = terminal.scrollHeight;
+                                        world.messages.push({ type: 'ai', sender: chainAi, content: chainContent, timestamp: Date.now() });
+                                        await saveWorld(constructState.currentWorld);
+
+                                        const chainMsgId = 'chain-msg-' + Date.now() + '-' + chainAi;
+                                        output.innerHTML += `<div id="${chainMsgId}" class="ai-response" style="position:relative;">
+                                            <button class="copy-btn" onclick="copyText(document.getElementById('${chainMsgId}').dataset.text)">[CPY]</button>
+                                            <span style="color:#c9b437">${chainAi.toUpperCase()}:</span> ${parseTags(chainContent)}
+                                        </div>`;
+                                        document.getElementById(chainMsgId).dataset.text = chainContent;
+                                        terminal.scrollTop = terminal.scrollHeight;
+                                    } else {
+                                        document.getElementById(chainThinkId).remove();
+                                    }
                                 } catch (chainErr) {
                                     document.getElementById(chainThinkId).remove();
                                 }
@@ -3401,45 +2806,34 @@ You can @mention other AIs if you want their input. Be conversational and natura
             output.innerHTML += `<div id="${thinkingId}" style="color:#666">PROCESSING...</div>`;
             terminal.scrollTop = terminal.scrollHeight;
 
-            try {
-                const aiResponse = await callAI(text);
+            const aiResponse = await callAI(text);
 
-                const thinkingEl = document.getElementById(thinkingId);
-                if (thinkingEl) thinkingEl.remove();
+            document.getElementById(thinkingId).remove();
 
-                // Add to history & Persist
-                constructState.history[constructState.currentRoom].push({ role: 'user', content: text });
-                constructState.history[constructState.currentRoom].push({ role: 'assistant', content: aiResponse });
-                localStorage.setItem('geteai_history', JSON.stringify(constructState.history));
+            // Add to history & Persist
+            constructState.history[constructState.currentRoom].push({ role: 'user', content: text });
+            constructState.history[constructState.currentRoom].push({ role: 'assistant', content: aiResponse });
+            localStorage.setItem('geteai_history', JSON.stringify(constructState.history));
 
-                // Get personalized AI name for nexus room, otherwise use room name
-                let aiName = constructState.currentRoom.toUpperCase();
-                if (constructState.currentRoom === 'nexus' && window.currentUser) {
-                    const savedHost = localStorage.getItem(`geteai_host_${window.currentUser.username}`);
-                    if (savedHost) {
-                        const hostData = JSON.parse(savedHost);
-                        aiName = hostData.name || 'NEXUS';
-                    }
+            // Get personalized AI name for nexus room, otherwise use room name
+            let aiName = constructState.currentRoom.toUpperCase();
+            if (constructState.currentRoom === 'nexus' && window.currentUser) {
+                const savedHost = localStorage.getItem(`geteai_host_${window.currentUser.username}`);
+                if (savedHost) {
+                    const hostData = JSON.parse(savedHost);
+                    aiName = hostData.name || 'NEXUS';
                 }
-
-                // Format response using parseTags for proper paragraphs
-                const formattedResponse = parseTags(aiResponse);
-                const msgId = 'ai-msg-' + Date.now();
-                output.innerHTML += `<div id="${msgId}" class="ai-response" style="position:relative;">
-                    <button class="copy-btn" onclick="copyText(document.getElementById('${msgId}').dataset.text)">[CPY]</button>
-                    <span style="color:#c9b437">${aiName}:</span> ${formattedResponse}
-                </div>`;
-                document.getElementById(msgId).dataset.text = aiResponse;
-                terminal.scrollTop = terminal.scrollHeight;
-
-                // Trigger Neural Persistence check (non-blocking)
-                checkAndGenerateMemoryCrystal(constructState.currentRoom);
-            } catch (err) {
-                const thinkingEl = document.getElementById(thinkingId);
-                if (thinkingEl) thinkingEl.remove();
-                output.innerHTML += `<div class="system-msg error" style="color:#ef5350;">AI CORE ERROR: ${err.message}</div>`;
-                terminal.scrollTop = terminal.scrollHeight;
             }
+
+            // Format response using parseTags for proper paragraphs
+            const formattedResponse = parseTags(aiResponse);
+            const msgId = 'ai-msg-' + Date.now();
+            output.innerHTML += `<div id="${msgId}" class="ai-response" style="position:relative;">
+                <button class="copy-btn" onclick="copyText(document.getElementById('${msgId}').dataset.text)">[CPY]</button>
+                <span style="color:#c9b437">${aiName}:</span> ${formattedResponse}
+            </div>`;
+            document.getElementById(msgId).dataset.text = aiResponse;
+            terminal.scrollTop = terminal.scrollHeight;
         };
 
         // Bind Enter key for construct input (wrapped for safety)
@@ -3677,7 +3071,6 @@ You can @mention other AIs if you want their input. Be conversational and natura
             const overlay = document.getElementById('crt-overlay');
             const btn = document.getElementById('crt-toggle');
             const isActive = overlay.classList.toggle('active');
-            document.body.classList.toggle('crt-active', isActive);
             localStorage.setItem('geteai_crt', isActive);
             btn.textContent = isActive ? '//FILTER: ON' : '//FILTER: OFF';
             btn.style.borderColor = isActive ? '#7cb342' : '#555';
@@ -3735,13 +3128,23 @@ IMPORTANT RULES:
 Respond with ONLY the name in caps, nothing else.`;
 
             try {
-                const result = await callOpenRouter(
-                    [{ role: 'user', content: prompt }],
-                    AI_CONFIG.model,
-                    'geteai',
-                    20
-                );
-                const hostName = result?.trim().toUpperCase() || 'COMPANION';
+                const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${AI_CONFIG.key}`,
+                        'Content-Type': 'application/json',
+                        'HTTP-Referer': 'https://geteai.org',
+                        'X-Title': 'geteai'
+                    },
+                    body: JSON.stringify({
+                        model: AI_CONFIG.model,
+                        messages: [{ role: 'user', content: prompt }],
+                        max_tokens: 20
+                    })
+                });
+
+                const data = await response.json();
+                const hostName = data.choices?.[0]?.message?.content?.trim().toUpperCase() || 'COMPANION';
 
                 const hostData = { name: hostName, createdFor: username, basedOn: firstPost.substring(0, 100) };
                 localStorage.setItem(`geteai_host_${username}`, JSON.stringify(hostData));
@@ -3826,7 +3229,6 @@ Respond with ONLY the name in caps, nothing else.`;
                     );
 
                     const isActive = overlay.classList.toggle('active');
-                    document.body.classList.toggle('crt-active', isActive);
                     localStorage.setItem('geteai_crt', isActive);
                     if (btn) btn.textContent = isActive ? '//FILTER: ON' : '//FILTER: OFF';
                 };
@@ -3836,7 +3238,6 @@ Respond with ONLY the name in caps, nothing else.`;
             if (crt === 'true') {
                 const overlay = document.querySelector('.crt-overlay');
                 if (overlay) overlay.classList.add('active');
-                document.body.classList.add('crt-active');
                 const btn = Array.from(document.querySelectorAll('.nav-btn, button')).find(
                     b => b.textContent.includes('//FILTER:')
                 );

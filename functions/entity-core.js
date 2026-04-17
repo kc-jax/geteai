@@ -94,7 +94,9 @@ async function birth() {
     await db.collection('entity').doc('state').set({
         birthTimestamp: admin.firestore.FieldValue.serverTimestamp(),
         conversationCount: 0,
-        lastActive: admin.firestore.FieldValue.serverTimestamp()
+        lastActive: admin.firestore.FieldValue.serverTimestamp(),
+        mood: 'observational',
+        stability: 1.0 // 0-1 range
     });
 
     console.log('ENTITY: Born. A blank page awaits.');
@@ -440,7 +442,12 @@ async function getState() {
         return null;
     }
 
-    return doc.data();
+    const data = doc.data();
+    return {
+        mood: 'observational',
+        stability: 1.0,
+        ...data
+    };
 }
 
 /**
