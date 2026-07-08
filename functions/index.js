@@ -530,3 +530,155 @@ exports.agoraArena = functions.pubsub
         // Logic for Arena would go here
         return null;
     });
+
+// ============================================================================
+// WORKSHEET GENERATOR — EA Reading Worksheet Tool
+// Dedicated API key + pinned model — completely isolated from site automations
+// ============================================================================
+
+/**
+ * Generate a custom reading worksheet using AI.
+ * Uses its own API key so RIVER/ENTITY automations never compete with it.
+ * Called from geteai.org/worksheets
+ */
+exports.generateWorksheet = functions.https.onCall(async (data, context) => {
+    const OpenAI = require('openai');
+
+    const {
+        topic = 'an interesting topic',
+        ageLevel = '5th grade, age 10',
+        readingLevel = '4th Grade (Levels Q-S)',
+        vocabCount = 4,
+        mcCount = 3,
+    } = data;
+
+    if (!topic || topic.trim().length < 2) {
+        throw new functions.https.HttpsError('invalid-argument', 'Topic is required.');
+    }
+
+    const saVocabCount = Math.min(Math.max(parseInt(vocabCount) || 4, 3), 6);
+    const saMcCount   = Math.min(Math.max(parseInt(mcCount) || 3, 2), 5);
+
+    // Dedicated key for worksheets — isolated from RIVER/ENTITY rate limits.
+    // Falls back to shared key if dedicated key not yet configured.
+    const worksheetKey = process.env.WORKSHEETS_OPENROUTER_KEY || process.env.OPENROUTER_KEY;
+    if (!worksheetKey) {
+        throw new functions.https.HttpsError('internal', 'No API key configured for worksheet generation.');
+    }
+
+    const client = new OpenAI({
+        apiKey: worksheetKey,
+        baseURL: 'https://openrouter.ai/api/v1',
+        defaultHeaders: {
+            'HTTP-Referer': 'https://geteai.org',
+            'X-Title': 'geteai Worksheet Generator',
+        },
+        timeout: 45000,
+    });
+
+    // Pinned model + one fallback. No long cascade — fail fast & clear.
+    const WORKSHEET_MODELS = [
+        'google/gemma-4-31b-it:free',       // Primary: great at structured JSON, 256K ctx
+        'nvidia/nemotron-3-ultra:free',      // Fallback: 550B MoE, very capable
+        'meta-llama/llama-3.3-70b-instruct:free', // Last resort: reliable & widely available
+    ];
+
+    const systemPrompt = `You are an expert educational content creator specializing in differentiated reading instruction.
+You create engaging, age-appropriate reading worksheets that follow a strict Pre-Reading → Reading → Post-Reading structure.
+You always respond with valid JSON only — no markdown fences, no explanation, just the JSON object.`;
+
+    const userPrompt = `Create a complete reading worksheet with the following specifications:
+
+TOPIC / STUDENT INTERESTS: ${topic}
+STUDENT AGE / MATURITY: ${ageLevel}
+TARGET READING LEVEL: ${readingLevel}
+NUMBER OF VOCABULARY WORDS: ${saVocabCount}
+NUMBER OF MULTIPLE CHOICE QUESTIONS: ${saMcCount}
+
+IMPORTANT WRITING GUIDELINES:
+- The passage MUST be written at exactly the target reading level (sentence length, word complexity, paragraph length).
+- Make the topic genuinely engaging and relevant to the student's interests — don't sanitize it into blandness.
+- Vocabulary words must come FROM the passage and feel useful/interesting to learn.
+- Multiple choice answers should have one clearly correct answer and two plausible distractors.
+- Short answer questions should require inference and personal connection, not just recall.
+- The passage should be 3–5 paragraphs, meaty enough for genuine comprehension practice.
+
+Respond with ONLY this JSON structure (no markdown, no extra text):
+{
+  "title": "An engaging worksheet title about the topic",
+  "preReadingQuestions": [
+    "An activating question to connect students to prior knowledge or personal experience",
+    "A prediction or curiosity question about the topic"
+  ],
+  "vocabulary": [
+    { "word": "Word", "definition": "Clear, student-friendly definition using context from the passage." }
+  ],
+  "passageTitle": "The Story or Article Title",
+  "passage": "Full multi-paragraph reading passage text. Use \\n\\n to separate paragraphs.",
+  "multipleChoice": [
+    {
+      "question": "Question text?",
+      "options": ["A) ...", "B) ...", "C) ..."],
+      "answer": "A"
+    }
+  ],
+  "shortAnswerQuestions": [
+    "An inferential short-answer question requiring a written response.",
+    "A personal connection or evaluation question."
+  ]
+}`;
+
+    const messages = [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt },
+    ];
+
+    console.log(`[WORKSHEETS] Generating: topic="${topic}", level="${readingLevel}", age="${ageLevel}"`);
+
+    let lastError = null;
+
+    for (const model of WORKSHEET_MODELS) {
+        try {
+            const completion = await client.chat.completions.create({
+                model,
+                messages,
+                max_tokens: 2000,
+                temperature: 0.75,
+            });
+
+            const raw = completion.choices?.[0]?.message?.content;
+            if (!raw) {
+                console.warn(`[WORKSHEETS] Empty response from ${model}, trying fallback...`);
+                continue;
+            }
+
+            // Strip any accidental markdown fences before parsing
+            const cleaned = raw.replace(/^```[a-z]*\n?/i, '').replace(/```\s*$/, '').trim();
+            const worksheet = JSON.parse(cleaned);
+
+            console.log(`[WORKSHEETS] ✓ Success with ${model}: "${worksheet.title}"`);
+            return { success: true, worksheet };
+
+        } catch (error) {
+            lastError = error;
+            const status = error?.status || 0;
+
+            if (status === 429 || status === 503 || status === 502) {
+                console.warn(`[WORKSHEETS] ${status} on ${model} — trying fallback...`);
+                continue;
+            }
+
+            if (error instanceof SyntaxError) {
+                console.warn(`[WORKSHEETS] JSON parse error on ${model} — trying fallback...`);
+                continue;
+            }
+
+            // Hard error — surface immediately
+            console.error(`[WORKSHEETS] Hard error on ${model}:`, error.message);
+            break;
+        }
+    }
+
+    console.error('[WORKSHEETS] All models failed. Last error:', lastError?.message);
+    throw new functions.https.HttpsError('internal', 'Worksheet generation failed. Please try again in a moment.');
+});

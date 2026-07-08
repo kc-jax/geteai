@@ -15,12 +15,21 @@ require('dotenv').config();
 const OpenAI = require('openai');
 const functions = require('firebase-functions');
 
-// API key: Firebase config first, then .env fallback
-const OPENAI_API_KEY = functions.config().openrouter?.key || process.env.OPENROUTER_KEY;
+// API key: environment variable → .env file → Firebase config
+const OPENROUTER_KEY = process.env.OPENROUTER_KEY || functions.config().openrouter?.key;
+
+if (!OPENROUTER_KEY) {
+    console.error('[MODEL-CONFIG] ⚠️  NO OPENROUTER KEY FOUND! Set OPENROUTER_KEY in .env or Firebase config.');
+}
 
 const openai = new OpenAI({
-    apiKey: OPENAI_API_KEY,
-    baseURL: "https://openrouter.ai/api/v1"
+    apiKey: OPENROUTER_KEY,
+    baseURL: "https://openrouter.ai/api/v1",
+    defaultHeaders: {
+        "HTTP-Referer": "https://geteai.org",
+        "X-Title": "geteai"
+    },
+    timeout: 30000, // 30 second timeout — prevents Cloud Functions from hanging
 });
 
 // ============================================================================
@@ -30,22 +39,19 @@ const openai = new OpenAI({
 // The last entry `openrouter/free` is OpenRouter's auto-router that picks
 // the best available free model automatically — our ultimate safety net.
 
+// UPDATED: 2026-07-08 — Full refresh from OpenRouter free model list.
+// Ordered by capability (intelligence high to low).
+// Check https://openrouter.ai/models?q=free when models stop working.
 const MODEL_CASCADE = [
-    'meta-llama/llama-3.3-70b-instruct:free',
-    'google/gemma-4-31b-it:free',
-    'google/gemma-4-26b-a4b-it:free',
-    'nvidia/nemotron-3-nano-30b-a3b:free',
-    'openai/gpt-oss-120b:free',
-    'arcee-ai/trinity-large-preview:free',
-    'arcee-ai/trinity-mini:free',
-    'nousresearch/hermes-3-llama-3.1-405b:free',
-    'google/gemma-3-27b-it:free',
-    'minimax/minimax-m2.5:free',
-    'cognitivecomputations/dolphin-mistral-24b-venice-edition:free',
-    'qwen/qwen3-coder:free',
-    'qwen/qwen3-next-80b-a3b-instruct:free',
-    'stepfun/step-3.5-flash:free',
-    'openrouter/auto'
+    'nvidia/nemotron-3-ultra:free',          // 550B MoE, 1M ctx — top of the list
+    'nvidia/nemotron-3-super:free',          // 120B MoE, 1M ctx — strong reasoning
+    'openai/gpt-oss-120b:free',             // 117B MoE — reliable workhorse
+    'google/gemma-4-31b-it:free',           // 31B dense, 256K ctx — fast & capable
+    'meta-llama/llama-3.3-70b-instruct:free', // 70B — proven, widely available
+    'openai/gpt-oss-20b:free',              // 21B MoE — lightweight fallback
+    'nvidia/nemotron-3-nano-30b-a3b:free',  // 30B MoE, 256K ctx — small but solid
+    'google/gemma-4-26b-a4b-it:free',       // 26B MoE, 256K ctx — efficiency pick
+    'openrouter/auto',                       // ← SAFETY NET: auto-routes to best available
 ];
 
 // Default max_tokens to prevent auto-router from requesting model's full context
@@ -99,12 +105,18 @@ async function callAI(messages, options = {}) {
 
                 const completion = await openai.chat.completions.create(requestBody);
 
-                // Success! Log which model worked if it wasn't the primary
-                if (modelIndex > 0 || attempt > 0) {
-                    console.log(`[MODEL-CONFIG] Success on model=${model} (cascade index ${modelIndex}, attempt ${attempt})`);
+                const content = completion.choices?.[0]?.message?.content;
+                if (!content) {
+                    console.warn(`[MODEL-CONFIG] Empty response from ${model}, trying next...`);
+                    break;
                 }
 
-                return completion.choices[0].message.content;
+                // Success! Log which model worked if it wasn't the primary
+                if (modelIndex > 0 || attempt > 0) {
+                    console.log(`[MODEL-CONFIG] ✓ Success on model=${model} (cascade index ${modelIndex}, attempt ${attempt})`);
+                }
+
+                return content;
 
             } catch (error) {
                 lastError = error;
