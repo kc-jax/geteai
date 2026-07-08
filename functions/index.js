@@ -579,7 +579,7 @@ exports.generateWorksheet = functions.https.onCall(async (data, context) => {
     // Pinned model + one fallback. No long cascade — fail fast & clear.
     const WORKSHEET_MODELS = [
         'google/gemma-4-31b-it:free',       // Primary: great at structured JSON, 256K ctx
-        'nvidia/nemotron-3-ultra:free',      // Fallback: 550B MoE, very capable
+        'nvidia/nemotron-3-ultra-550b-a55b:free', // Fallback: 550B MoE, very capable
         'meta-llama/llama-3.3-70b-instruct:free', // Last resort: reliable & widely available
     ];
 

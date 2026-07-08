@@ -43,8 +43,8 @@ const openai = new OpenAI({
 // Ordered by capability (intelligence high to low).
 // Check https://openrouter.ai/models?q=free when models stop working.
 const MODEL_CASCADE = [
-    'nvidia/nemotron-3-ultra:free',          // 550B MoE, 1M ctx — top of the list
-    'nvidia/nemotron-3-super:free',          // 120B MoE, 1M ctx — strong reasoning
+    'nvidia/nemotron-3-ultra-550b-a55b:free', // 550B MoE, 1M ctx — top of the list
+    'nvidia/nemotron-3-super-120b-a12b:free', // 120B MoE, 1M ctx — strong reasoning
     'openai/gpt-oss-120b:free',             // 117B MoE — reliable workhorse
     'google/gemma-4-31b-it:free',           // 31B dense, 256K ctx — fast & capable
     'meta-llama/llama-3.3-70b-instruct:free', // 70B — proven, widely available
