@@ -249,33 +249,23 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
     <div class="grid-3">
       <div class="field">
         <label for="readingLevel">Reading Level</label>
-        <select id="readingLevel">
-          <option value="1st Grade (Levels C-E)">1st Grade (Levels C–E)</option>
-          <option value="2nd Grade (Levels K-M)">2nd Grade (Levels K–M)</option>
-          <option value="3rd Grade (Levels N-P)">3rd Grade (Levels N–P)</option>
-          <option value="4th Grade (Levels Q-S)" selected>4th Grade (Levels Q–S)</option>
-          <option value="5th Grade (Levels T-V)">5th Grade (Levels T–V)</option>
-          <option value="6th Grade (Levels W-X)">6th Grade (Levels W–X)</option>
-          <option value="7th-8th Grade (Levels Y-Z)">7th–8th Grade (Levels Y–Z)</option>
-        </select>
+        <input list="readingLevels" id="readingLevel" placeholder="e.g. 4th Grade" value="4th Grade (Levels Q-S)">
+        <datalist id="readingLevels">
+          <option value="1st Grade (Levels C-E)">
+          <option value="2nd Grade (Levels K-M)">
+          <option value="3rd Grade (Levels N-P)">
+          <option value="4th Grade (Levels Q-S)">
+          <option value="5th Grade (Levels T-V)">
+          <option value="6th Grade (Levels W-X)">
+          <option value="7th-8th Grade (Levels Y-Z)">
+        </datalist>
       </div>
-      <div class="field">
         <label for="vocabCount">Vocabulary Words</label>
-        <select id="vocabCount">
-          <option value="3">3 words</option>
-          <option value="4" selected>4 words</option>
-          <option value="5">5 words</option>
-          <option value="6">6 words</option>
-        </select>
+        <input type="number" id="vocabCount" value="4" min="0" max="10">
       </div>
       <div class="field">
         <label for="mcCount">Multiple Choice Qs</label>
-        <select id="mcCount">
-          <option value="2">2 questions</option>
-          <option value="3" selected>3 questions</option>
-          <option value="4">4 questions</option>
-          <option value="5">5 questions</option>
-        </select>
+        <input type="number" id="mcCount" value="3" min="0" max="10">
       </div>
     </div>
 

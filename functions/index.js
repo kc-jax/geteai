@@ -673,9 +673,9 @@ Respond with ONLY this JSON structure (no markdown, no extra text):
                 continue;
             }
 
-            // Hard error — surface immediately
-            console.error(`[WORKSHEETS] Hard error on ${model}:`, error.message);
-            break;
+            // Hard error (e.g. 404, 400) — log it and still try next model!
+            console.warn(`[WORKSHEETS] Hard error on ${model}:`, error.message);
+            continue;
         }
     }
 
