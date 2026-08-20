@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Worksheet Generator — geteai</title>
+<meta name="description" content="AI-powered reading worksheet generator for educators. Enter a topic and reading level, get a print-ready worksheet in seconds.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<script type="module">
+// Module script — all logic lives here
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-functions.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyAT1u7uOjir-aGTUMU-g4KVvJUXvs_STNc",
+  authDomain: "geteai.firebaseapp.com",
+  projectId: "geteai",
+  storageBucket: "geteai.firebasestorage.app",
+  messagingSenderId: "166165680160",
+  appId: "1:166165680160:web:297727188dc7cf8a4eec45"
+};
+
+const app = initializeApp(firebaseConfig);
+const functions = getFunctions(app);
+const generateFn = httpsCallable(functions, 'generateWorksheet');
+
+// ── Expose functions to global scope for onclick handlers ──
+window._generateFn = generateFn;
+</script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0a0b0f;
+  --surface:#13151c;
+  --surface2:#1a1d27;
+  --border:#2a2d3a;
+  --accent:#7c6ff7;
+  --accent2:#a78bfa;
+  --accent-glow:rgba(124,111,247,0.25);
+  --green:#34d399;
+  --red:#f87171;
+  --text:#e8eaf0;
+  --muted:#8b90a8;
+  --radius:14px;
+}
+html{scroll-behavior:smooth}
+body{
+  font-family:'Inter',sans-serif;
+  background:var(--bg);
+  color:var(--text);
+  min-height:100vh;
+  overflow-x:hidden;
+}
+
+/* ── BACKGROUND ORBS ── */
+.bg-orbs{position:fixed;inset:0;pointer-events:none;z-index:0;overflow:hidden}
+.orb{position:absolute;border-radius:50%;filter:blur(80px);opacity:0.18;animation:drift 18s ease-in-out infinite alternate}
+.orb1{width:500px;height:500px;background:#7c6ff7;top:-150px;left:-100px;animation-delay:0s}
+.orb2{width:400px;height:400px;background:#a78bfa;bottom:-100px;right:-80px;animation-delay:4s}
+.orb3{width:300px;height:300px;background:#34d399;top:40%;left:55%;animation-delay:8s}
+@keyframes drift{from{transform:translate(0,0) scale(1)}to{transform:translate(40px,30px) scale(1.08)}}
+
+/* ── LAYOUT ── */
+.wrapper{position:relative;z-index:1;max-width:900px;margin:0 auto;padding:40px 24px 80px}
+
+/* ── HEADER ── */
+.header{text-align:center;margin-bottom:48px}
+.header-badge{
+  display:inline-flex;align-items:center;gap:8px;
+  background:rgba(124,111,247,0.12);border:1px solid rgba(124,111,247,0.3);
+  color:var(--accent2);padding:6px 16px;border-radius:999px;font-size:12px;font-weight:600;
+  letter-spacing:0.08em;text-transform:uppercase;margin-bottom:20px;
+}
+.header h1{font-size:clamp(2rem,5vw,3.2rem);font-weight:800;line-height:1.1;margin-bottom:16px}
+.header h1 span{
+  background:linear-gradient(135deg,var(--accent),var(--accent2),#60a5fa);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text
+}
+.header p{color:var(--muted);font-size:1.05rem;max-width:540px;margin:0 auto}
+
+/* ── CONTROL PANEL ── */
+.panel{
+  background:rgba(19,21,28,0.8);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  padding:32px;
+  backdrop-filter:blur(20px);
+  box-shadow:0 8px 40px rgba(0,0,0,0.4),inset 0 1px 0 rgba(255,255,255,0.04);
+  margin-bottom:32px;
+}
+.panel-title{font-size:11px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--accent2);margin-bottom:24px}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+.grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;margin-top:20px}
+@media(max-width:600px){.grid-2,.grid-3{grid-template-columns:1fr}}
+.field{display:flex;flex-direction:column;gap:8px}
+label{font-size:12px;font-weight:600;color:var(--muted);letter-spacing:0.04em;text-transform:uppercase}
+input,select{
+  background:var(--surface2);border:1px solid var(--border);border-radius:8px;
+  color:var(--text);font-family:'Inter',sans-serif;font-size:15px;padding:12px 16px;
+  transition:border-color .2s,box-shadow .2s;outline:none;width:100%;
+  -webkit-appearance:none;appearance:none;
+}
+input::placeholder{color:var(--muted)}
+input:focus,select:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-glow)}
+select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%238b90a8' d='M6 8L1 3h10z'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 14px center;padding-right:40px}
+
+/* ── BUTTONS ── */
+.btn-row{display:flex;gap:12px;margin-top:28px}
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:8px;
+  padding:14px 28px;border-radius:10px;font-family:'Inter',sans-serif;font-size:15px;
+  font-weight:600;cursor:pointer;border:none;transition:all .2s;flex:1;
+}
+.btn-primary{
+  background:linear-gradient(135deg,var(--accent),var(--accent2));
+  color:#fff;box-shadow:0 4px 20px rgba(124,111,247,0.4);
+}
+.btn-primary:hover{transform:translateY(-2px);box-shadow:0 8px 30px rgba(124,111,247,0.5)}
+.btn-primary:active{transform:translateY(0)}
+.btn-primary:disabled{opacity:0.5;cursor:not-allowed;transform:none}
+.btn-secondary{
+  background:rgba(52,211,153,0.1);border:1px solid rgba(52,211,153,0.3);
+  color:var(--green);display:none;
+}
+.btn-secondary:hover{background:rgba(52,211,153,0.18);transform:translateY(-2px)}
+.btn-secondary.show{display:inline-flex}
+
+/* ── LOADING ── */
+.loading-state{
+  display:none;text-align:center;padding:60px 24px;
+  background:rgba(19,21,28,0.8);border:1px solid var(--border);border-radius:var(--radius);
+  backdrop-filter:blur(20px);margin-bottom:32px;
+}
+.loading-state.show{display:block}
+.spinner{
+  width:48px;height:48px;border:3px solid var(--border);border-top-color:var(--accent);
+  border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 20px;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading-state p{color:var(--muted);font-size:14px}
+.loading-state .loading-label{font-size:18px;font-weight:600;color:var(--text);margin-bottom:8px}
+
+/* ── ERROR STATE ── */
+.error-msg{
+  display:none;background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.25);
+  color:var(--red);padding:16px 20px;border-radius:10px;font-size:14px;margin-bottom:20px;
+}
+.error-msg.show{display:block}
+
+/* ── WORKSHEET PREVIEW ── */
+.preview-wrapper{
+  display:none;background:rgba(19,21,28,0.6);border:1px solid var(--border);
+  border-radius:var(--radius);padding:8px;backdrop-filter:blur(20px);margin-bottom:20px;
+}
+.preview-wrapper.show{display:block}
+.preview-header{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:16px 20px;border-bottom:1px solid var(--border);margin-bottom:0;
+}
+.preview-header span{font-size:12px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent2)}
+.preview-tag{
+  background:rgba(52,211,153,0.12);border:1px solid rgba(52,211,153,0.25);
+  color:var(--green);padding:4px 12px;border-radius:999px;font-size:11px;font-weight:600;
+}
+
+/* ── THE PRINTABLE WORKSHEET ── */
+#printableArea{
+  background:#fff;padding:48px 52px;
+  font-family:'Lora',Georgia,serif;color:#111;line-height:1.65;
+}
+.ws-meta{
+  display:flex;justify-content:space-between;align-items:flex-start;
+  border-bottom:2.5px solid #111;padding-bottom:12px;margin-bottom:24px;
+}
+.ws-branding{font-family:'Inter',sans-serif;font-size:11px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#555}
+.ws-info{font-family:'Inter',sans-serif;font-size:11px;color:#555;text-align:right;line-height:1.8}
+.ws-title{font-size:22px;font-weight:700;margin-bottom:6px;font-family:'Inter',sans-serif}
+.ws-level{font-family:'Inter',sans-serif;font-size:12px;color:#666;margin-bottom:28px}
+.ws-section{
+  font-family:'Inter',sans-serif;font-size:10px;font-weight:800;letter-spacing:0.14em;
+  text-transform:uppercase;color:#7c6ff7;margin:28px 0 14px;border-left:3px solid #7c6ff7;
+  padding-left:10px;
+}
+.ws-question{margin-bottom:12px;font-size:14px}
+.ws-question-num{font-weight:700}
+.ws-vocab{margin-bottom:10px;font-size:14px}
+.ws-vocab strong{font-style:normal}
+.ws-passage-title{font-size:17px;font-weight:600;margin-bottom:14px;font-family:'Inter',sans-serif}
+.ws-para{margin-bottom:14px;font-size:14px;text-align:justify}
+.ws-mc{margin-bottom:16px}
+.ws-mc-q{font-size:14px;font-weight:600;margin-bottom:6px;font-family:'Inter',sans-serif}
+.ws-mc-opts{list-style:none;padding:0}
+.ws-mc-opts li{font-size:13px;padding:3px 0;padding-left:4px}
+.ws-sa{margin-bottom:20px}
+.ws-sa-q{font-size:14px;margin-bottom:10px}
+.ws-line{display:block;border-bottom:1px solid #ccc;margin-top:22px;width:100%}
+.ws-name-row{
+  display:flex;gap:40px;margin-bottom:28px;font-family:'Inter',sans-serif;font-size:12px;color:#444;
+}
+.ws-name-field{flex:1;border-bottom:1px solid #aaa;padding-bottom:2px}
+
+/* ── FOOTER ── */
+.site-footer{text-align:center;margin-top:60px;color:var(--muted);font-size:13px}
+.site-footer a{color:var(--accent2);text-decoration:none}
+.site-footer a:hover{text-decoration:underline}
+
+/* ── ANIMATIONS ── */
+.fade-in{animation:fadeIn .4s ease forwards}
+@keyframes fadeIn{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+</style>
+</head>
+<body>
+
+<div class="bg-orbs">
+  <div class="orb orb1"></div>
+  <div class="orb orb2"></div>
+  <div class="orb orb3"></div>
+</div>
+
+<div class="wrapper">
+
+  <!-- HEADER -->
+  <header class="header">
+    <div class="header-badge">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+      AI-Powered
+    </div>
+    <h1>Worksheet <span>Generator</span></h1>
+    <p>Craft a complete, print-ready reading worksheet in seconds. Powered by real AI — not a template.</p>
+  </header>
+
+  <!-- CONTROLS -->
+  <div class="panel">
+    <div class="panel-title">⚡ Worksheet Settings</div>
+
+    <div class="grid-2">
+      <div class="field">
+        <label for="topic">Topic / Student Interests</label>
+        <input type="text" id="topic" placeholder="e.g. giant crocodiles, D&D, survival stories">
+      </div>
+      <div class="field">
+        <label for="ageLevel">Student Age / Maturity</label>
+        <input type="text" id="ageLevel" placeholder="e.g. 7th grade / 12 years old, edgy is fine">
+      </div>
+    </div>
+
+    <div class="grid-3">
+      <div class="field">
+        <label for="readingLevel">Reading Level</label>
+        <input list="readingLevels" id="readingLevel" placeholder="e.g. 4th Grade" value="4th Grade (Levels Q-S)">
+        <datalist id="readingLevels">
+          <option value="1st Grade (Levels C-E)">
+          <option value="2nd Grade (Levels K-M)">
+          <option value="3rd Grade (Levels N-P)">
+          <option value="4th Grade (Levels Q-S)">
+          <option value="5th Grade (Levels T-V)">
+          <option value="6th Grade (Levels W-X)">
+          <option value="7th-8th Grade (Levels Y-Z)">
+        </datalist>
+      </div>
+        <label for="vocabCount">Vocabulary Words</label>
+        <input type="number" id="vocabCount" value="4" min="0" max="10">
+      </div>
+      <div class="field">
+        <label for="mcCount">Multiple Choice Qs</label>
+        <input type="number" id="mcCount" value="3" min="0" max="10">
+      </div>
+    </div>
+
+    <div class="error-msg" id="errorMsg"></div>
+
+    <div class="btn-row">
+      <button class="btn btn-primary" id="generateBtn" onclick="generateWorksheet()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+        Generate Worksheet
+      </button>
+      <button class="btn btn-secondary" id="downloadBtn" onclick="downloadPDF()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Download PDF
+      </button>
+    </div>
+  </div>
+
+  <!-- LOADING -->
+  <div class="loading-state" id="loadingState">
+    <div class="spinner"></div>
+    <div class="loading-label">Crafting your worksheet…</div>
+    <p>The AI is writing a custom passage, vocabulary, and questions. This takes about 10–20 seconds.</p>
+  </div>
+
+  <!-- WORKSHEET PREVIEW -->
+  <div class="preview-wrapper" id="previewWrapper">
+    <div class="preview-header">
+      <span>📄 Worksheet Preview</span>
+      <span class="preview-tag">Ready to Print</span>
+    </div>
+    <div id="printableArea">
+      <!-- Rendered by JS -->
+    </div>
+  </div>
+
+  <footer class="site-footer">
+    <a href="https://geteai.org">← Back to geteai.org</a>
+    &nbsp;·&nbsp; Worksheets are AI-generated and may need review before distribution.
+  </footer>
+</div>
+
+<script>
+// ── GENERATE ──
+async function generateWorksheet() {
+  const topic        = document.getElementById('topic').value.trim();
+  const ageLevel     = document.getElementById('ageLevel').value.trim();
+  const readingLevel = document.getElementById('readingLevel').value;
+  const vocabCount   = document.getElementById('vocabCount').value;
+  const mcCount      = document.getElementById('mcCount').value;
+  const errEl        = document.getElementById('errorMsg');
+
+  errEl.classList.remove('show');
+
+  if (!topic)    { showError('Please enter a topic or student interest.'); return; }
+  if (!ageLevel) { showError('Please enter the student age / maturity level.'); return; }
+
+  setLoading(true);
+
+  try {
+    const generateFn = window._generateFn;
+    if (!generateFn) throw new Error('Firebase not ready yet. Please refresh and try again.');
+
+    const result = await generateFn({ topic, ageLevel, readingLevel, vocabCount, mcCount });
+
+    if (!result.data.success) throw new Error(result.data.error || 'Unknown error from server.');
+
+    renderWorksheet(result.data.worksheet, { readingLevel, ageLevel });
+  } catch (err) {
+    console.error(err);
+    const msg = err.message || 'Something went wrong. Please try again.';
+    showError(msg.includes('INTERNAL') ? 'The AI had trouble generating this worksheet. Please try again.' : msg);
+  } finally {
+    setLoading(false);
+  }
+}
+
+function showError(msg) {
+  const el = document.getElementById('errorMsg');
+  el.textContent = '⚠️ ' + msg;
+  el.classList.add('show');
+}
+
+function setLoading(on) {
+  document.getElementById('generateBtn').disabled = on;
+  document.getElementById('loadingState').classList.toggle('show', on);
+  if (on) {
+    document.getElementById('previewWrapper').classList.remove('show');
+    document.getElementById('downloadBtn').classList.remove('show');
+  }
+}
+
+// ── RENDER WORKSHEET ──
+function renderWorksheet(ws, meta) {
+  const today = new Date().toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' });
+
+  let preReadingHTML = ws.preReadingQuestions.map((q, i) =>
+    `<div class="ws-question"><span class="ws-question-num">${i + 1}.</span> ${q}</div>`
+  ).join('');
+
+  let vocabHTML = ws.vocabulary.map(v =>
+    `<div class="ws-vocab"><strong>${v.word}:</strong> ${v.definition}</div>`
+  ).join('');
+
+  const paragraphs = ws.passage.split(/\n\n+/).filter(p => p.trim());
+  let passageHTML = paragraphs.map(p => `<p class="ws-para">${p.trim()}</p>`).join('');
+
+  let mcHTML = ws.multipleChoice.map((mc, i) => `
+    <div class="ws-mc">
+      <div class="ws-mc-q">${i + 1}. ${mc.question}</div>
+      <ul class="ws-mc-opts">
+        ${mc.options.map(o => `<li>${o}</li>`).join('')}
+      </ul>
+    </div>
+  `).join('');
+
+  let saHTML = ws.shortAnswerQuestions.map((q, i) => `
+    <div class="ws-sa">
+      <div class="ws-sa-q">${ws.multipleChoice.length + i + 1}. ${q}</div>
+      <span class="ws-line"></span>
+      <span class="ws-line"></span>
+      <span class="ws-line"></span>
+    </div>
+  `).join('');
+
+  document.getElementById('printableArea').innerHTML = `
+    <div class="ws-meta">
+      <div class="ws-branding">geteai · Worksheet Generator</div>
+      <div class="ws-info">Reading Level: ${meta.readingLevel}<br>Generated: ${today}</div>
+    </div>
+    <div class="ws-name-row">
+      <div class="ws-name-field">Name: ___________________________</div>
+      <div class="ws-name-field">Date: ___________________________</div>
+      <div class="ws-name-field">Class: __________________________</div>
+    </div>
+    <div class="ws-title">${ws.title}</div>
+    <div class="ws-level">Target Level: ${meta.readingLevel} &nbsp;|&nbsp; ${meta.ageLevel}</div>
+
+    <div class="ws-section">Pre-Reading</div>
+    <p style="font-size:13px;font-family:'Inter',sans-serif;color:#444;margin-bottom:14px;font-style:italic">Think about these questions before you read:</p>
+    ${preReadingHTML}
+
+    <div class="ws-section">Vocabulary</div>
+    <p style="font-size:13px;font-family:'Inter',sans-serif;color:#444;margin-bottom:12px;font-style:italic">Learn these words before reading the passage:</p>
+    ${vocabHTML}
+
+    <div class="ws-section">Reading Passage</div>
+    <div class="ws-passage-title">${ws.passageTitle}</div>
+    ${passageHTML}
+
+    <div class="ws-section">Post-Reading — Multiple Choice</div>
+    <p style="font-size:13px;font-family:'Inter',sans-serif;color:#444;margin-bottom:14px;font-style:italic">Circle the best answer for each question:</p>
+    ${mcHTML}
+
+    <div class="ws-section">Post-Reading — Short Answer</div>
+    <p style="font-size:13px;font-family:'Inter',sans-serif;color:#444;margin-bottom:14px;font-style:italic">Write your answers in complete sentences:</p>
+    ${saHTML}
+  `;
+
+  document.getElementById('previewWrapper').classList.add('show');
+  document.getElementById('downloadBtn').classList.add('show');
+  document.getElementById('previewWrapper').scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+  // Trigger fade-in
+  document.getElementById('printableArea').classList.add('fade-in');
+}
+
+// ── PDF DOWNLOAD ──
+function downloadPDF() {
+  const el    = document.getElementById('printableArea');
+  const topic = document.getElementById('topic').value.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+  const level = document.getElementById('readingLevel').value.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+
+  const opt = {
+    margin: [0.6, 0.65, 0.6, 0.65],
+    filename: `worksheet_${topic}_${level}.pdf`,
+    image: { type: 'jpeg', quality: 0.98 },
+    html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
+    jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
+  };
+
+  const btn = document.getElementById('downloadBtn');
+  btn.disabled = true;
+  btn.textContent = 'Generating PDF…';
+
+  html2pdf().set(opt).from(el).save().then(() => {
+    btn.disabled = false;
+    btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Download PDF`;
+  });
+}
+</script>
+</body>
+</html>

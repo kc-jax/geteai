@@ -1,0 +1,30 @@
+# Dependencies
+node_modules/
+functions/node_modules/
+
+# Environment / Secrets
+.env
+functions/.env
+
+# Firebase local
+.firebase/
+
+# Temp & dev files
+temp_*.html
+*.log
+serveo_output.txt
+tunnel_url.txt
+
+# Data dumps (too large for git, contain API keys)
+models_raw.json
+openrouter_models.json
+full_codebase.md
+
+# One-off scripts (keep locally, don't track)
+fix_site.py
+extract_js.py
+start_ai_tunnel.bat
+check_models.js
+test_*.js
+functions/test_*.js
+functions/debug_*.js

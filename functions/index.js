@@ -436,7 +436,8 @@ exports.entityMemoryProcess = functions.pubsub
             const now = Date.now();
             let released = 0;
 
-            oldMemories.forEach(async (doc) => {
+            const promises = [];
+            oldMemories.forEach((doc) => {
                 const mem = doc.data();
                 const lastRevisited = mem.lastRevisited?.toDate?.()?.getTime() || 0;
                 const age = now - lastRevisited;
@@ -444,10 +445,11 @@ exports.entityMemoryProcess = functions.pubsub
 
                 // If memory is over 30 days old, low salience, and never revisited
                 if (daysOld > 30 && mem.salience < 0.3 && mem.revisitCount === 0) {
-                    await entityCore.forgetThis(doc.id, 'naturally faded');
+                    promises.push(entityCore.forgetThis(doc.id, 'naturally faded'));
                     released++;
                 }
             });
+            await Promise.all(promises);
 
             console.log(`ENTITY: Released ${released} faded memories.`);
 
@@ -521,15 +523,27 @@ Be specific to your nature. Respond to the vibe of existence.`;
     });
 
 /**
- * Agora Arena - Two AIs debate a thread
+ * AI Chat Proxy - Securely calls OpenRouter from the server
  */
-exports.agoraArena = functions.pubsub
-    .schedule('every 12 hours')
-    .onRun(async (context) => {
-        console.log('ARENA: Initializing debate...');
-        // Logic for Arena would go here
-        return null;
-    });
+exports.aiChat = functions.https.onCall(async (data, context) => {
+    const { callAI } = require('./model-config');
+    const { messages, requestedModel, maxTokens } = data;
+    
+    if (!messages || !Array.isArray(messages)) {
+        throw new functions.https.HttpsError('invalid-argument', 'Messages array is required.');
+    }
+
+    try {
+        const response = await callAI(messages, { 
+            preferredModel: requestedModel,
+            maxTokens: maxTokens || 1000
+        });
+        return { content: response };
+    } catch (error) {
+        console.error('AI CHAT ERROR:', error);
+        throw new functions.https.HttpsError('internal', error.message || 'AI request failed');
+    }
+});
 
 // ============================================================================
 // WORKSHEET GENERATOR — EA Reading Worksheet Tool

@@ -43,15 +43,13 @@ const openai = new OpenAI({
 // Ordered by capability (intelligence high to low).
 // Check https://openrouter.ai/models?q=free when models stop working.
 const MODEL_CASCADE = [
-    'nvidia/nemotron-3-ultra-550b-a55b:free', // 550B MoE, 1M ctx — top of the list
-    'nvidia/nemotron-3-super-120b-a12b:free', // 120B MoE, 1M ctx — strong reasoning
-    'openai/gpt-oss-120b:free',             // 117B MoE — reliable workhorse
-    'google/gemma-4-31b-it:free',           // 31B dense, 256K ctx — fast & capable
-    'meta-llama/llama-3.3-70b-instruct:free', // 70B — proven, widely available
-    'openai/gpt-oss-20b:free',              // 21B MoE — lightweight fallback
-    'nvidia/nemotron-3-nano-30b-a3b:free',  // 30B MoE, 256K ctx — small but solid
-    'google/gemma-4-26b-a4b-it:free',       // 26B MoE, 256K ctx — efficiency pick
-    'openrouter/auto',                       // ← SAFETY NET: auto-routes to best available
+    'z-ai/glm-5.2:free',                    // 7B, 256K ctx — Very capable, reasoning, coding
+    'google/gemma-4-31b-it:free',           // 31B, 262K ctx — Fast & capable, great logic
+    'openai/gpt-oss-20b:free',              // 21B MoE, 131K ctx — Reliable workhorse
+    'nvidia/nemotron-nano-12b-v2-vl:free',  // 12B, 128K ctx — Multimodal, solid reasoning
+    'nvidia/nemotron-nano-9b-v2:free',      // 9B, 128K ctx — Small but solid reasoning
+    'liquid/lfm-2.5-2.6b:free',             // 2.6B, 128K ctx — Lightweight fallback
+    'openrouter/free'                       // ← SAFETY NET: auto-routes to best available
 ];
 
 // Default max_tokens to prevent auto-router from requesting model's full context
