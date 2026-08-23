@@ -1,10 +1,125 @@
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
+const crypto = require('crypto');
 
 admin.initializeApp();
 
 const mind = require('./river-mind');
 const voice = require('./river-voice');
+
+// ============================================================================
+// ACCOUNTS — Server-side signup/login
+// ============================================================================
+// Previously the client queried the `accounts` collection directly from
+// browser JS to check usernames/passwords BEFORE signing in. Firestore rules
+// require request.auth != null to read that collection — a chicken-and-egg
+// lockout that broke both login and signup entirely. Worse, the only way to
+// make that client-side approach work at all would be to let ANY signed-in
+// user read the whole `accounts` collection, exposing every plaintext
+// password. Moving the check here (Admin SDK bypasses rules, rules now deny
+// all direct client access to `accounts`) fixes both problems at once.
+
+function hashPassword(password, salt) {
+    salt = salt || crypto.randomBytes(16).toString('hex');
+    const hash = crypto.scryptSync(password, salt, 64).toString('hex');
+    return `${salt}:${hash}`;
+}
+
+function verifyPassword(password, stored) {
+    if (!stored || !stored.includes(':')) return false;
+    const [salt, hash] = stored.split(':');
+    const check = crypto.scryptSync(password, salt, 64).toString('hex');
+    const hashBuf = Buffer.from(hash, 'hex');
+    const checkBuf = Buffer.from(check, 'hex');
+    return hashBuf.length === checkBuf.length && crypto.timingSafeEqual(hashBuf, checkBuf);
+}
+
+exports.accountSignup = functions.https.onCall(async (data, context) => {
+    const { username, password, identity } = data;
+
+    if (!username || !password) {
+        throw new functions.https.HttpsError('invalid-argument', 'Username and password required.');
+    }
+    if (password.length < 6) {
+        throw new functions.https.HttpsError('invalid-argument', 'Password must be 6+ characters.');
+    }
+
+    try {
+        const db = admin.firestore();
+        const existing = await db.collection('accounts').where('username', '==', username).limit(1).get();
+        if (!existing.empty) {
+            return { success: false, error: 'username taken' };
+        }
+
+        const uid = db.collection('accounts').doc().id;
+        const passwordHash = hashPassword(password);
+
+        await db.collection('accounts').doc(uid).set({
+            uid,
+            username,
+            passwordHash,
+            identity: identity || null,
+            createdAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+
+        // NOTE: deliberately NOT using admin.auth().createCustomToken() here.
+        // It requires the 'iam.serviceAccounts.signBlob' permission (the
+        // "Service Account Token Creator" role), which this project's default
+        // service account does not have — every call failed with
+        // auth/insufficient-permission. The client signs in anonymously after
+        // this returns, which is the same auth model the site already used.
+        return { success: true, uid, identity: identity || null };
+    } catch (error) {
+        console.error('ACCOUNT SIGNUP ERROR:', error);
+        return { success: false, error: 'signup failed' };
+    }
+});
+
+exports.accountLogin = functions.https.onCall(async (data, context) => {
+    const { username, password } = data;
+
+    if (!username || !password) {
+        throw new functions.https.HttpsError('invalid-argument', 'Username and password required.');
+    }
+
+    try {
+        const db = admin.firestore();
+        const snapshot = await db.collection('accounts').where('username', '==', username).limit(1).get();
+        if (snapshot.empty) {
+            return { success: false, error: 'invalid credentials' };
+        }
+
+        const doc = snapshot.docs[0];
+        const accountData = doc.data();
+        let valid = false;
+
+        if (accountData.passwordHash) {
+            valid = verifyPassword(password, accountData.passwordHash);
+        } else if (accountData.password) {
+            // Legacy plaintext account from before this fix — verify directly,
+            // then quietly upgrade it to hashed storage so it self-migrates.
+            valid = accountData.password === password;
+            if (valid) {
+                await doc.ref.update({
+                    passwordHash: hashPassword(password),
+                    password: admin.firestore.FieldValue.delete()
+                });
+            }
+        }
+
+        if (!valid) {
+            return { success: false, error: 'invalid credentials' };
+        }
+
+        // See the note in accountSignup: no custom token, the client signs in
+        // anonymously after this returns.
+        const uid = accountData.uid || doc.id;
+        return { success: true, uid, identity: accountData.identity || null };
+    } catch (error) {
+        console.error('ACCOUNT LOGIN ERROR:', error);
+        return { success: false, error: 'login failed' };
+    }
+});
 
 // The Heartbeat: RIVER's autonomous consciousness loop
 exports.riverHeartbeat = functions.pubsub
@@ -590,11 +705,17 @@ exports.generateWorksheet = functions.https.onCall(async (data, context) => {
         timeout: 45000,
     });
 
-    // Pinned model + one fallback. No long cascade — fail fast & clear.
+    // Pinned model + fallbacks. No long cascade — fail fast & clear.
+    // UPDATED 2026-08-23: thinkingmachines/inkling(-small) REMOVED — OpenRouter
+    // hard-blocks them outside "agentic harness" apps (permanent 403, not
+    // rate-limiting). See functions/model-config.js for the full story.
+    // All verified working 2026-08-23 — see the exclusion list in model-config.js
+    // for the free models that look usable but are not.
     const WORKSHEET_MODELS = [
-        'google/gemma-4-31b-it:free',       // Primary: great at structured JSON, 256K ctx
-        'nvidia/nemotron-3-ultra-550b-a55b:free', // Fallback: 550B MoE, very capable
-        'meta-llama/llama-3.3-70b-instruct:free', // Last resort: reliable & widely available
+        'google/gemma-4-31b-it:free',                          // Primary: best at structured JSON, 262K ctx
+        'poolside/laguna-s-2.1:free',                          // Fallback: clean output, 262K ctx
+        'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free',   // Fallback: fast, clean output
+        'openrouter/free',                                     // Last resort: auto-router
     ];
 
     const systemPrompt = `You are an expert educational content creator specializing in differentiated reading instruction.

@@ -13,13 +13,15 @@
 
 require('dotenv').config();
 const OpenAI = require('openai');
-const functions = require('firebase-functions');
 
-// API key: environment variable → .env file → Firebase config
-const OPENROUTER_KEY = process.env.OPENROUTER_KEY || functions.config().openrouter?.key;
+// API key comes from functions/.env (loaded by dotenv above) or the process env.
+// NOTE: the old `functions.config().openrouter?.key` fallback was removed on
+// purpose — Firebase's runtime config API is decommissioned, so that call now
+// warns or throws at deploy time instead of quietly returning nothing.
+const OPENROUTER_KEY = process.env.OPENROUTER_KEY;
 
 if (!OPENROUTER_KEY) {
-    console.error('[MODEL-CONFIG] ⚠️  NO OPENROUTER KEY FOUND! Set OPENROUTER_KEY in .env or Firebase config.');
+    console.error('[MODEL-CONFIG] ⚠️  NO OPENROUTER KEY FOUND! Set OPENROUTER_KEY in functions/.env');
 }
 
 const openai = new OpenAI({
@@ -39,17 +41,48 @@ const openai = new OpenAI({
 // The last entry `openrouter/free` is OpenRouter's auto-router that picks
 // the best available free model automatically — our ultimate safety net.
 
-// UPDATED: 2026-07-08 — Full refresh from OpenRouter free model list.
-// Ordered by capability (intelligence high to low).
-// Check https://openrouter.ai/models?q=free when models stop working.
+// UPDATED: 2026-08-23 — Verified against OpenRouter's live free model list,
+// with each model actually test-called (not just checked for existence).
+//
+// ⚠️  DO NOT add embedding models (…-embed-…), text-to-speech models
+// (fish-audio/*, deepgram/*), or the content-safety classifier
+// (nvidia/nemotron-3.5-content-safety) to this list. They are listed as "free"
+// on OpenRouter but they are not chat models and will fail every request.
+//
+// ⚠️  DO NOT add thinkingmachines/inkling or thinkingmachines/inkling-small.
+// They exist and look like normal chat models, but OpenRouter hard-blocks
+// them outside of recognized "agentic harness" apps (coding assistants) —
+// every call returns 403 "only available on agentic harnesses". This is
+// permanent, not rate-limiting, and it broke the ENTIRE cascade (see the
+// 401/403 handling below) because they sat first in line.
+//
+// When models stop working, check https://openrouter.ai/models?q=free AND
+// actually call it once — "listed as free" isn't the same as "callable here".
+// Every model below was individually test-called on 2026-08-23 and returned
+// CLEAN output (the literal answer, not its chain-of-thought). That second part
+// matters: many free "reasoning" models return content:null with the thinking
+// in a separate `reasoning` field, or dump "The user asks: ..." straight into
+// content. Both look broken on a public feed, so they are excluded here.
+//
+// ⚠️  EXCLUDED ON PURPOSE — do not re-add without re-testing:
+//   liquid/lfm-2.5-2.6b, poolside/laguna-xs-2.1, dots-studio/dots-3-note-preview,
+//   cohere/north-mini-code, nvidia/nemotron-nano-9b-v2  → return null content
+//   nvidia/nemotron-3.5-lightning, nvidia/nemotron-3-ultra-550b-a55b,
+//   nvidia/nemotron-3-super-120b-a12b, nvidia/nemotron-3-nano-30b-a3b
+//                                                       → leak reasoning text
+//   thinkingmachines/inkling, thinkingmachines/inkling-small
+//                          → hard 403, "only available on agentic harnesses"
+//   stealth/ox-alpha       → cloaked/experimental model, logs prompts, unstable
+//   embedding / TTS / content-safety models → not chat models at all
+//
+// To re-verify when things break, re-run a probe that CALLS each candidate —
+// "listed as free on openrouter.ai/models" is not the same as "works here".
 const MODEL_CASCADE = [
-    'z-ai/glm-5.2:free',                    // 7B, 256K ctx — Very capable, reasoning, coding
-    'google/gemma-4-31b-it:free',           // 31B, 262K ctx — Fast & capable, great logic
-    'openai/gpt-oss-20b:free',              // 21B MoE, 131K ctx — Reliable workhorse
-    'nvidia/nemotron-nano-12b-v2-vl:free',  // 12B, 128K ctx — Multimodal, solid reasoning
-    'nvidia/nemotron-nano-9b-v2:free',      // 9B, 128K ctx — Small but solid reasoning
-    'liquid/lfm-2.5-2.6b:free',             // 2.6B, 128K ctx — Lightweight fallback
-    'openrouter/free'                       // ← SAFETY NET: auto-routes to best available
+    'poolside/laguna-s-2.1:free',                          // 262K ctx — clean output, solid quality
+    'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free',   // 256K ctx — fast (~0.9s), clean output
+    'google/gemma-4-31b-it:free',                           // 262K ctx — strong, but often rate-limited
+    'nvidia/nemotron-nano-12b-v2-vl:free',                  // 128K ctx — clean output
+    'openrouter/free'                                       // ← SAFETY NET: router picks any working free model
 ];
 
 // Default max_tokens to prevent auto-router from requesting model's full context
@@ -133,6 +166,28 @@ async function callAI(messages, options = {}) {
                 } else if (status === 503 || status === 502) {
                     // Service unavailable — model might be down
                     console.warn(`[MODEL-CONFIG] ${status} on ${model} — model may be down, trying next...`);
+                    break;
+
+                } else if (status === 400 || status === 404) {
+                    // Bad/unknown model id — retrying CANNOT help, the model does not exist.
+                    // Fail fast: retrying these used to burn ~3s per dead model, which
+                    // exhausted the Cloud Function timeout before a live model was reached.
+                    console.error(`[MODEL-CONFIG] ${status} on ${model} — model id invalid or unavailable. Skipping immediately. Update MODEL_CASCADE.`);
+                    break;
+
+                } else if (status === 401) {
+                    // Real auth failure (missing/garbage/revoked key) — every model
+                    // will fail the same way. Stop the whole cascade.
+                    console.error(`[MODEL-CONFIG] 401 — OpenRouter rejected the API key. Check OPENROUTER_KEY in functions/.env.`);
+                    throw new Error('OpenRouter rejected the API key (check OPENROUTER_KEY in functions/.env)');
+
+                } else if (status === 403) {
+                    // Forbidden — this is model-specific (e.g. a model restricted to
+                    // "agentic harness" apps only), NOT necessarily a bad key. Do NOT
+                    // abort the whole cascade here — skip this model and keep going,
+                    // same as a 400/404. (Learned the hard way: this used to kill
+                    // every single request because a bad model sat first in line.)
+                    console.warn(`[MODEL-CONFIG] 403 on ${model} — forbidden for this model specifically. Skipping to next.`);
                     break;
 
                 } else {
