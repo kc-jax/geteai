@@ -19,44 +19,24 @@ if not exist "functions\.env" (
 )
 
 echo.
-echo [1/4] Syncing root index.html for GitHub Pages (geteai.org)...
-REM geteai.org is served by GitHub Pages from the ROOT index.html, while
-REM geteai.web.app is served by Firebase from public/. Keep them identical.
-REM See the hosting section in DEPLOYMENT.md. Remove this step once the
-REM domain is repointed to Firebase Hosting.
-copy /Y "public\index.html" "index.html" >nul
-if errorlevel 1 (
-    echo [ERROR] Could not copy public\index.html to index.html
-) else (
-    echo       root index.html updated
-)
-
-echo.
-echo [2/4] Deploying Firestore Rules...
+echo [1/3] Deploying Firestore Rules...
 call firebase deploy --only firestore:rules --project geteai
 if errorlevel 1 goto :failed
 
 echo.
-echo [3/4] Deploying Cloud Functions...
+echo [2/3] Deploying Cloud Functions...
 call firebase deploy --only functions --project geteai --force
 if errorlevel 1 goto :failed
 
 echo.
-echo [4/4] Deploying Hosting (public/)...
+echo [3/3] Deploying Hosting (public/)...
 call firebase deploy --only hosting --project geteai
 if errorlevel 1 goto :failed
 
 echo.
 echo ==============================================================
-echo  Firebase deploy complete - https://geteai.web.app is updated
+echo  Deploy complete - https://geteai.org is updated
 echo ==============================================================
-echo.
-echo  IMPORTANT: geteai.org is served by GitHub Pages, NOT Firebase.
-echo  To update geteai.org as well, run:
-echo.
-echo      git add -A
-echo      git commit -m "Deploy"
-echo      git push
 echo.
 goto :end
 
