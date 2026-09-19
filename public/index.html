@@ -1160,6 +1160,8 @@
         <!-- THE CONSTRUCT (FREE AI) -->
         <div id="construct-section" class="section">
             <h2 class="section-header">the construct</h2>
+            <div id="construct-voices"
+                style="display:none; flex-wrap:wrap; gap:0.5rem; margin-bottom:0.75rem;"></div>
             <div id="construct-terminal" class="terminal-window">
                 <div id="construct-output">
                     <div class="system-msg">INITIALIZING CONSTRUCT PROTOCOL..._</div>
@@ -2803,6 +2805,8 @@ Just output the text of your reply.`;
             }
             inputArea.style.display = 'none';
             loginBtn.style.display = 'none';
+            const voiceBar = document.getElementById('construct-voices');
+            if (voiceBar) voiceBar.style.display = 'none';
 
             if (!window.currentUser) {
                 output.innerHTML += `<div class="system-msg error">ERROR: UNIDENTIFIED SIGNAL. LOGIN REQUIRED.</div>`;
@@ -2852,6 +2856,7 @@ Just output the text of your reply.`;
                 inputArea.style.display = 'block';
                 inputArea.style.display = 'flex';
                 document.getElementById('construct-input').focus();
+                window.renderVoiceBar();
             } else {
                 output.innerHTML += `<div class="system-msg error">ACCESS DENIED.</div>`;
                 output.innerHTML += `<div class="system-msg">REASON: NO CONTRIBUTION SIGNATURE FOUND.</div>`;
@@ -3054,6 +3059,41 @@ SITE AWARENESS: [This section will be dynamically updated with recent site activ
             } catch (e) {}
         };
 
+        // Clickable frequency switcher. These rooms used to be reachable only by
+        // typing "/join <name>", and /voices — the command that listed the names —
+        // was never implemented, so most people never got past NEXUS.
+        // Built with textContent + addEventListener rather than an innerHTML string
+        // because room keys can be user-created.
+        window.renderVoiceBar = function () {
+            const bar = document.getElementById('construct-voices');
+            if (!bar) return;
+            bar.innerHTML = '';
+            Object.keys(constructState.rooms).forEach(key => {
+                const room = constructState.rooms[key] || {};
+                const btn = document.createElement('button');
+                btn.className = 'nav-btn' + (key === constructState.currentRoom ? ' active' : '');
+                btn.title = room.desc || 'A custom voice.';
+                btn.textContent = '//' + key.toUpperCase();
+                btn.addEventListener('click', () => window.switchVoice(key));
+                bar.appendChild(btn);
+            });
+            bar.style.display = 'flex';
+        };
+
+        window.switchVoice = function (key) {
+            if (!constructState.rooms[key] || key === constructState.currentRoom) return;
+            constructState.currentRoom = key;
+            const output = document.getElementById('construct-output');
+            const terminal = document.getElementById('construct-terminal');
+            if (output) {
+                output.innerHTML += `<div class="system-msg success">CONNECTED TO ${key.toUpperCase()}</div>`;
+            }
+            window.renderVoiceBar();
+            if (terminal) terminal.scrollTop = terminal.scrollHeight;
+            const input = document.getElementById('construct-input');
+            if (input) input.focus();
+        };
+
         window.sendConstruct = async function () {
             const input = document.getElementById('construct-input');
             const text = input.value.trim();
@@ -3113,6 +3153,7 @@ SITE AWARENESS: [This section will be dynamically updated with recent site activ
                 } else {
                     output.innerHTML += `<div class="system-msg error">UNKNOWN COMMAND: ${cmd} &mdash; type /help</div>`;
                 }
+                window.renderVoiceBar();
                 terminal.classList.remove('construct-thinking');
                 input.disabled = false;
                 terminal.scrollTop = terminal.scrollHeight;
