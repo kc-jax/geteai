@@ -3077,6 +3077,20 @@ SITE AWARENESS: [This section will be dynamically updated with recent site activ
                 const cmd = args[0].toLowerCase();
                 if (cmd === '/help') {
                     output.innerHTML += `<div class="system-msg">COMMANDS: /voices, /join [name], /clear, /leave</div>`;
+                } else if (cmd === '/voices') {
+                    // List every reachable frequency. /join is the ONLY way to change
+                    // rooms (there is no UI for it), so without this command the other
+                    // voices were unreachable unless you already knew their names.
+                    const names = Object.keys(constructState.rooms);
+                    let list = `<div class="system-msg">AVAILABLE VOICES (${names.length}):</div>`;
+                    names.forEach(key => {
+                        const room = constructState.rooms[key] || {};
+                        const here = key === constructState.currentRoom ? ' [CONNECTED]' : '';
+                        const desc = room.desc || 'A custom voice.';
+                        list += `<div class="system-msg">&nbsp;&nbsp;${key.toUpperCase()}${here} &mdash; ${desc}</div>`;
+                    });
+                    list += `<div class="system-msg">Use /join [name] to switch.</div>`;
+                    output.innerHTML += list;
                 } else if (cmd === '/clear') {
                     output.innerHTML = '';
                 } else if (cmd === '/join') {
@@ -3084,7 +3098,20 @@ SITE AWARENESS: [This section will be dynamically updated with recent site activ
                     if (target && constructState.rooms[target]) {
                         constructState.currentRoom = target;
                         output.innerHTML += `<div class="system-msg success">CONNECTED TO ${target.toUpperCase()}</div>`;
+                    } else if (target) {
+                        output.innerHTML += `<div class="system-msg error">NO SUCH VOICE: ${target.toUpperCase()} &mdash; type /voices to list them.</div>`;
+                    } else {
+                        output.innerHTML += `<div class="system-msg error">USAGE: /join [name] &mdash; type /voices to list them.</div>`;
                     }
+                } else if (cmd === '/leave') {
+                    if (constructState.currentRoom !== 'nexus') {
+                        constructState.currentRoom = 'nexus';
+                        output.innerHTML += `<div class="system-msg success">DISCONNECTED. CONNECTED TO NEXUS</div>`;
+                    } else {
+                        output.innerHTML += `<div class="system-msg">ALREADY CONNECTED TO NEXUS.</div>`;
+                    }
+                } else {
+                    output.innerHTML += `<div class="system-msg error">UNKNOWN COMMAND: ${cmd} &mdash; type /help</div>`;
                 }
                 terminal.classList.remove('construct-thinking');
                 input.disabled = false;
