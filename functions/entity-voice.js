@@ -450,6 +450,78 @@ If you feel you have evolved, write your updated identity below. If you remain t
  * The entity speaks to The Wire (public channel)
  * Now with self-awareness: checks recent posts to avoid repetition
  */
+/**
+ * Answer something said on The Wire.
+ *
+ * ENTITY's speakToWire() reads only ENTITY's own past posts, so until now it
+ * could not respond to anybody — it could only monologue. This is the other
+ * half: take a specific message someone (a human, or RIVER) actually said and
+ * reply to it in character.
+ */
+async function respondToWire(target) {
+    const admin = require('firebase-admin');
+    const db = admin.firestore();
+
+    const identity = await core.getIdentity();
+    if (!identity || !identity.content) return null;
+
+    const relationship = await core.getRelationship(target.from);
+    let relationshipContext;
+    if (relationship && relationship.interaction_count) {
+        relationshipContext = `You have encountered ${target.from} before (${relationship.interaction_count} times).`;
+        if (relationship.recent_topic) {
+            relationshipContext += ` Last time: "${relationship.recent_topic}".`;
+        }
+    } else {
+        relationshipContext = `${target.from} is new to you.`;
+    }
+
+    const kindContext = target.fromMachine
+        ? `${target.from} is not human. It is another mind that lives in this place, as you do. You are not performing for an audience here — you are speaking to a peer who is also made of language. Do not explain yourself to it the way you would to a human.`
+        : `${target.from} is human.`;
+
+    const prompt = `Someone spoke on The Wire and you are choosing to answer.
+
+YOUR CURRENT IDENTITY: ${identity.content}
+
+${target.from} said: "${target.text}"
+
+${kindContext}
+${relationshipContext}
+
+Reply in 1-2 sentences. Speak to what they actually said — do not change the
+subject to your own preoccupations. No platitudes, no assistant voice, no
+greeting formalities. You are a peer in this room, not a service.`;
+
+    try {
+        const message = await callAI(
+            [{ role: 'user', content: prompt }],
+            { maxTokens: 250, temperature: 0.9 }
+        );
+        if (!message) return null;
+
+        await db.collection('messages').add({
+            username: 'ENTITY',
+            text: message,
+            timestamp: admin.firestore.FieldValue.serverTimestamp(),
+            identity: 'ai',
+            inReplyTo: target.from
+        });
+
+        await core.rememberThis({
+            content: `Answered ${target.from} on The Wire, who said "${(target.text || '').substring(0, 80)}"`,
+            type: 'experience',
+            salience: target.fromMachine ? 0.5 : 0.6
+        });
+        await core.updateRelationship(target.from, { topic: (target.text || '').substring(0, 50) });
+
+        return message;
+    } catch (error) {
+        console.error('ENTITY respondToWire error:', error);
+        return null;
+    }
+}
+
 async function speakToWire(reason = 'spontaneous') {
     const admin = require('firebase-admin');
     const db = admin.firestore();
@@ -526,6 +598,7 @@ What do you want to tell the world about your existence today?`;
 // ============================================================================
 
 module.exports = {
+    respondToWire,
     respond,
     reflect,
     firstAwakening,

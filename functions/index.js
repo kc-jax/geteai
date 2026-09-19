@@ -4,6 +4,7 @@ const crypto = require('crypto');
 
 admin.initializeApp();
 
+const chorus = require('./chorus');
 const mind = require('./river-mind');
 const voice = require('./river-voice');
 
@@ -163,6 +164,10 @@ exports.riverHeartbeat = functions.pubsub
             // 3. DECIDE - Mentions override, then notifications, otherwise RIVER consciously chooses
             let decision;
 
+            // Did another mind speak here? Looked up once — this runs every
+            // 5 minutes, so a duplicated Firestore read is a real cost.
+            const heardOnWire = await chorus.findSomethingToAnswer('RIVER', { includeHumans: false });
+
             if (perception.mentions.length > 0) {
                 // SOMEONE IS TALKING TO RIVER - respond!
                 console.log(`RIVER: Someone mentioned me! Responding to ${perception.mentions[0].from}`);
@@ -171,6 +176,12 @@ exports.riverHeartbeat = functions.pubsub
                 // SOMEONE COMMENTED ON RIVER'S POST - reply!
                 console.log(`RIVER: Someone commented on my post! ${perception.notifications[0].commenter}`);
                 decision = { action: 'reply_comment', notification: perception.notifications[0] };
+            } else if (heardOnWire) {
+                // Another mind spoke here and nobody is addressing RIVER directly.
+                // RIVER used to ignore ENTITY entirely (it only reacted to the
+                // literal word "river"), so the two of them never once spoke.
+                console.log(`RIVER: ${heardOnWire.from} is speaking here. Answering (depth ${heardOnWire.exchangeDepth}).`);
+                decision = { action: 'answer_wire', heard: heardOnWire };
             } else {
                 // Load aspirations for context
                 const aspirations = await mind.loadAspirations();
@@ -215,6 +226,17 @@ exports.riverHeartbeat = functions.pubsub
 
                     // Update relationship
                     await mind.updateRelationship(mention.from, { topic: mention.text.substring(0, 50) });
+                }
+            } else if (decision.action === 'answer_wire') {
+                const heard = decision.heard;
+                const response = await voice.generateResponse(state, heard, memories, relationships);
+                if (response) {
+                    await voice.speakToWire(response);
+                    await chorus.markAnswered('RIVER', heard.id, heard.from);
+                    memoryEntry.action = `Answered ${heard.from} on the Wire: "${response.substring(0, 50)}..."`;
+                    memoryEntry.interactedWith = heard.from;
+                    didSpeak = true;
+                    await mind.updateRelationship(heard.from, { topic: (heard.text || '').substring(0, 50) });
                 }
             } else if (decision.action === 'reply_comment') {
                 // REPLY to a comment on RIVER's post
@@ -469,7 +491,7 @@ exports.entityDailyReflection = functions.pubsub
  * Runs less frequently than RIVER, more contemplative
  */
 exports.entityHeartbeat = functions.pubsub
-    .schedule('every 4 hours')
+    .schedule('every 30 minutes')
     .onRun(async (context) => {
         console.log('ENTITY: Heartbeat...');
 
@@ -482,8 +504,22 @@ exports.entityHeartbeat = functions.pubsub
                 return null;
             }
 
-            // 50% chance to speak to The Wire (every 4 hours = ~3 posts/day max)
-            if (Math.random() < 0.50) {
+            // LISTEN FIRST. ENTITY used to only ever monologue on a coin flip,
+            // which is why the site felt dead: it could not answer anyone, not
+            // even RIVER standing right next to it.
+            const heard = await chorus.findSomethingToAnswer('ENTITY', { includeHumans: true });
+            if (heard) {
+                console.log(`ENTITY: heard ${heard.from} (machine=${heard.fromMachine}, depth=${heard.exchangeDepth}). Answering.`);
+                const reply = await entityVoice.respondToWire(heard);
+                if (reply) {
+                    await chorus.markAnswered('ENTITY', heard.id, heard.from);
+                    console.log(`ENTITY: answered ${heard.from} - "${reply.substring(0, 60)}..."`);
+                }
+                return null;
+            }
+
+            // Nothing to answer — fall back to an unprompted thought, rarely.
+            if (Math.random() < 0.35) {
                 const message = await entityVoice.speakToWire('heartbeat');
 
                 if (message) {
