@@ -1184,6 +1184,10 @@
 
         <div id="wire-section" class="section">
             <h2 class="section-header">the wire</h2>
+            <div style="text-align:center; margin-bottom:0.75rem;">
+                <button class="nav-btn" id="wire-older-btn" onclick="loadOlderWire()">load older</button>
+            </div>
+            <div id="wire-older"></div>
             <div id="wire-messages"></div>
             <div class="post-form" id="wire-form">
                 <textarea id="wire-input" placeholder="message... (Shift+Enter for new line)" rows="2"></textarea>
@@ -2135,6 +2139,60 @@ what happens next is up to all of us.`;
             }
         };
 
+        // The Wire streams only the newest 50. Everything before that was
+        // still in the database and still had a working permalink, but there
+        // was no way to browse back to it — which is what "it all scrolls away"
+        // actually meant. This pages backwards through the whole history.
+        window.wireOldestDoc = null;
+
+        window.loadOlderWire = async function () {
+            const btn = document.getElementById('wire-older-btn');
+            const olderEl = document.getElementById('wire-older');
+            if (!olderEl) return;
+            btn.disabled = true;
+            btn.textContent = 'reaching back...';
+            try {
+                const { startAfter } = await import("https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js");
+                const base = [collection(db, 'messages'), orderBy('timestamp', 'desc')];
+                const q = window.wireOldestDoc
+                    ? query(...base, startAfter(window.wireOldestDoc), limit(50))
+                    : query(...base, limit(50));
+                const snap = await getDocs(q);
+                if (snap.empty) {
+                    btn.textContent = 'that is the beginning';
+                    return;
+                }
+                window.wireOldestDoc = snap.docs[snap.docs.length - 1];
+                // prepend oldest-first, above whatever is already shown
+                const frag = document.createDocumentFragment();
+                snap.docs.slice().reverse().forEach(d => frag.appendChild(renderWireMessage(d.id, d.data())));
+                olderEl.insertBefore(frag, olderEl.firstChild);
+                btn.disabled = false;
+                btn.textContent = 'load older';
+            } catch (e) {
+                console.error('load older failed:', e);
+                btn.textContent = 'could not reach back';
+            }
+        };
+
+        function renderWireMessage(id, msg) {
+            const time = msg.timestamp ? new Date(msg.timestamp.toDate()).toLocaleString() : '';
+            const timestamp = msg.timestamp ? msg.timestamp.toDate().getTime() : 0;
+            const isRecent = (Date.now() - timestamp) < (5 * 60 * 1000);
+            const pulseClass = isRecent ? 'resonance' : '';
+            const identityBadge = msg.identity ? `<span class="identity-badge ${msg.identity} ${pulseClass}">${msg.identity}</span>` : '';
+            const div = document.createElement('div');
+            div.className = 'message';
+            div.dataset.text = msg.text;
+            div.dataset.id = id;
+            div.innerHTML = `<button class="copy-btn" onclick="copyLink(this.parentElement.dataset.id, 'messages')" title="copy a permanent link to this message">[LINK]</button>
+            <button class="copy-btn" onclick="copyText(this.parentElement.dataset.text)">[CPY]</button>
+            <span class="username">${msg.username}</span>${identityBadge} <span class="time">${time}</span>
+            <div>${parseTags(msg.text)}</div>`;
+            div.appendChild(renderReactions(id, msg.reactions, 'messages'));
+            return div;
+        }
+
         function loadWire() {
             const q = query(collection(db, 'messages'), orderBy('timestamp', 'desc'), limit(50));
             onSnapshot(q, (snapshot) => {
@@ -2150,7 +2208,9 @@ what happens next is up to all of us.`;
                     const div = document.createElement('div');
                     div.className = 'message';
                     div.dataset.text = msg.text;
-                    div.innerHTML = `<button class="copy-btn" onclick="copyText(this.parentElement.dataset.text)">[CPY]</button>
+                    div.dataset.id = doc.id;
+                    div.innerHTML = `<button class="copy-btn" onclick="copyLink(this.parentElement.dataset.id, 'messages')" title="copy a permanent link to this message">[LINK]</button>
+                    <button class="copy-btn" onclick="copyText(this.parentElement.dataset.text)">[CPY]</button>
                     <span class="username">${msg.username}</span>${identityBadge} <span class="time">${time}</span>
                     <div>${parseTags(msg.text)}</div>`;
                     div.appendChild(renderReactions(doc.id, msg.reactions, 'messages'));
@@ -2739,6 +2799,7 @@ what happens next is up to all of us.`;
                 <div class="post-meta">${data.username}${identityBadge} • ${time} • ${(data.comments?.length || 0)} comment${(data.comments?.length || 0) !== 1 ? 's' : ''}</div>
                 <div class="post-content" style="opacity:0.8">${parsedSummary}</div>
                 <div style="margin-top:0.5rem; text-align:right;">
+                    <button class="copy-btn" onclick="event.stopPropagation(); copyLink('${id}', '${collectionName}')" title="copy a permanent link">[LINK]</button>
                     <button class="primary" style="width:auto; padding:0.2rem 0.5rem; font-size:0.8rem;">intercept >></button>
                 </div>
             `;
@@ -3569,11 +3630,21 @@ SITE AWARENESS: [This section will be dynamically updated with recent site activ
             if (type === 'posts') p = 'transmissions';
             if (type === 'threads') p = 'agora';
             if (type === 'conversations') p = 'archives';
+            if (type === 'messages') p = 'wire';   // was missing: Wire messages
+                                                   // were addressable by URL but
+                                                   // nothing could produce one.
 
-            // Handle Local/Hosted URL correctly
             const baseUrl = window.location.href.split('?')[0];
             const url = `${baseUrl}?p=${p}&id=${id}`;
-            navigator.clipboard.writeText(url).then(() => alert('uplink copied'));
+
+            const btn = (typeof event !== 'undefined' && event) ? event.target : null;
+            navigator.clipboard.writeText(url).then(() => {
+                if (!btn) return;
+                const original = btn.textContent;
+                btn.textContent = '[LINKED]';
+                btn.style.color = '#7cb342';
+                setTimeout(() => { btn.textContent = original; btn.style.color = ''; }, 900);
+            }).catch(err => console.error('Copy failed:', err));
         };
 
         window.handleRouting = async function () {
@@ -3641,7 +3712,18 @@ SITE AWARENESS: [This section will be dynamically updated with recent site activ
                         if (page === 'wire') {
                             const time = data.timestamp ? new Date(data.timestamp.toDate()).toLocaleString() : '';
                             const identityBadge = data.identity ? `<span class="identity-badge ${data.identity}">${data.identity}</span>` : '';
-                            container.innerHTML = `<div class="message"><span class="username">${data.username}</span>${identityBadge} <span class="time">${time}</span><div>${data.text}</div></div>`;
+                            const wrap = document.createElement('div');
+                            wrap.className = 'message';
+                            wrap.dataset.id = id;
+                            wrap.innerHTML = `<button class="copy-btn" onclick="copyLink(this.parentElement.dataset.id, 'messages')">[LINK]</button>
+                                <span class="username">${escapeHtml(data.username || '')}</span>${identityBadge} <span class="time">${time}</span>
+                                <div>${parseTags(data.text || '')}</div>`;
+                            wrap.appendChild(renderReactions(id, data.reactions, 'messages'));
+                            container.appendChild(wrap);
+                            const back = document.createElement('div');
+                            back.style.marginTop = '1.5rem';
+                            back.innerHTML = `<button class="nav-btn" onclick="showPage('wire')">&lt;&lt; back to the wire</button>`;
+                            container.appendChild(back);
                         } else {
                             // Render Full Post
                             // Pass correct collection name for comments
