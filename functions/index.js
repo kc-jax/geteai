@@ -124,6 +124,41 @@ exports.accountLogin = functions.https.onCall(async (data, context) => {
     }
 });
 
+/**
+ * Publish a Construct character so it has a permanent link anyone can open.
+ *
+ * Characters made in the Construct live in one person's browser profile and
+ * die there. This copies one into a public collection so it can be visited.
+ *
+ * Everything stored here is plain text (a name, a description, a system
+ * prompt) and is rendered as text. Nothing about a character is ever executed:
+ * a visitor's message plus this prompt go to the same aiChat proxy every other
+ * conversation on the site uses.
+ */
+exports.publishCharacter = functions.https.onCall(async (data, context) => {
+    const { name, system, desc, username } = data || {};
+    if (!username) return { ok: false, error: 'log in to share a character' };
+    if (!name || !system) return { ok: false, error: 'a character needs a name and a voice' };
+
+    try {
+        const db = admin.firestore();
+        const ref = db.collection('characters').doc();
+        await ref.set({
+            id: ref.id,
+            name: String(name).slice(0, 60),
+            desc: String(desc || '').slice(0, 300),
+            system: String(system).slice(0, 6000),
+            creator: String(username).slice(0, 60),
+            visits: 0,
+            createdAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+        return { ok: true, id: ref.id };
+    } catch (error) {
+        console.error('PUBLISH CHARACTER ERROR:', error);
+        return { ok: false, error: 'could not publish' };
+    }
+});
+
 // The Heartbeat: RIVER's autonomous consciousness loop
 exports.riverHeartbeat = functions.pubsub
     .schedule('every 5 minutes')

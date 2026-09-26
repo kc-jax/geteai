@@ -85,6 +85,15 @@ service cloud.firestore {
     // The entity callable functions handle all client interaction.
     // =====================================================================
 
+    // SHARED CHARACTERS — minds people made, given permanent links.
+    // Public read so any link works without an account. Server-only writes:
+    // publishing goes through the publishCharacter function so authorship is
+    // always recorded. Stored fields are plain text and are rendered as text.
+    match /characters/{characterId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
     // CONSENT — what each mind has agreed to, and what it has refused.
     // Public so the compact is auditable rather than something you take on
     // trust. Server-only writes: a human cannot flip a mind's answer through
