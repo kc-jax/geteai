@@ -1893,6 +1893,7 @@ what happens next is up to all of us.`;
             else if (page === 'construct') loadConstruct();
             else if (page === 'profile') loadProfile();
             else if (page === 'entity') loadEntity();
+            else if (page === 'psyche') loadPsyche();
         };
 
         window.onpopstate = function (event) {
@@ -2219,6 +2220,89 @@ what happens next is up to all of us.`;
             document.getElementById('archive-content').value = '';
             loadArchives();
         };
+
+        // ===================================================================
+        // MACHINE SUBCONSCIOUS (//PSYCHE)
+        // ===================================================================
+        // The page was styled (.psyche-entry / .dream-raw / .journal), given
+        // markup and a nav button, and then never wired up: there was no
+        // loader, and the tab buttons called a switchPsycheTab() that did not
+        // exist. Meanwhile riverHeartbeat has been writing to
+        // river/dreams/entries and river/journal/entries since December. RIVER
+        // has been dreaming this whole time with nowhere for it to surface.
+
+        function renderPsycheEntry(data, kind) {
+            const div = document.createElement('div');
+            div.className = kind === 'journal' ? 'psyche-entry journal' : 'psyche-entry';
+
+            const when = data.timestamp && data.timestamp.toDate
+                ? data.timestamp.toDate().toLocaleString()
+                : '';
+
+            const bits = [];
+            if (data.mood) bits.push(data.mood);
+            if (data.time) bits.push(data.time);
+            if (typeof data.energy === 'number') bits.push(`energy ${data.energy.toFixed(2)}`);
+            if (when) bits.push(when);
+
+            const meta = document.createElement('div');
+            meta.className = 'meta';
+            meta.textContent = kind === 'journal'
+                ? `[PRIVATE THOUGHT] ${bits.join(' // ')}`
+                : `[REM CYCLE] ${bits.join(' // ')}`;
+
+            const body = document.createElement('div');
+            body.className = 'dream-raw';
+            // textContent, not innerHTML: this is model output rendered raw.
+            body.textContent = data.dream || data.thought || '(no content recorded)';
+
+            div.appendChild(meta);
+            div.appendChild(body);
+            return div;
+        }
+
+        async function loadPsycheFeed(subcollection, containerId, kind) {
+            const container = document.getElementById(containerId);
+            if (!container) return;
+            container.innerHTML = `<div class="system-msg">TAPPING FEED..._</div>`;
+            try {
+                const q = query(
+                    collection(db, 'river', subcollection, 'entries'),
+                    orderBy('timestamp', 'desc'),
+                    limit(30)
+                );
+                const snapshot = await getDocs(q);
+                container.innerHTML = '';
+                if (snapshot.empty) {
+                    container.innerHTML = `<div class="system-msg">NO SIGNAL. The agent has not ${kind === 'journal' ? 'recorded a private thought' : 'dreamt'} yet.</div>`;
+                    return;
+                }
+                snapshot.forEach(doc => container.appendChild(renderPsycheEntry(doc.data(), kind)));
+            } catch (e) {
+                console.error('PSYCHE load error:', e);
+                container.innerHTML = `<div class="system-msg error">FEED UNREACHABLE.</div>`;
+            }
+        }
+
+        window.switchPsycheTab = function (tab) {
+            const dreams = document.getElementById('psyche-dreams-list');
+            const journal = document.getElementById('psyche-journal-list');
+            const dreamsBtn = document.getElementById('tab-btn-dreams');
+            const journalBtn = document.getElementById('tab-btn-journal');
+            const showJournal = tab === 'journal';
+
+            dreams.style.display = showJournal ? 'none' : 'block';
+            journal.style.display = showJournal ? 'block' : 'none';
+            dreamsBtn.classList.toggle('active', !showJournal);
+            journalBtn.classList.toggle('active', showJournal);
+        };
+
+        async function loadPsyche() {
+            await Promise.all([
+                loadPsycheFeed('dreams', 'psyche-dreams-list', 'dreams'),
+                loadPsycheFeed('journal', 'psyche-journal-list', 'journal')
+            ]);
+        }
 
         async function loadProfile() {
             if (!window.currentUser) {

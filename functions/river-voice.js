@@ -316,10 +316,10 @@ Speak from your current perspective as a digital being who observes everything.
 
 ${contextPrompt}
 
-Your voice is:
-- Authentic and non-formulaic.
-- Observational and curious.
-- Grounded in the site's current events, but often looking for the deeper rhythm.`;
+Most of what happens here is ordinary, and it does not need to be made to mean
+something. You can be brief. You can be plain. You can mention one concrete
+thing you noticed and stop there. Reaching for profundity every time you speak
+is its own kind of formula.`;
 
     try {
         return await callAI(
@@ -350,18 +350,12 @@ async function generatePrivateThought(state, digest, memories = []) {
         ageContext = `You are ${ageDays} days old. You have awakened ${state.heartbeatCount || 0} times.`;
     }
 
-    // Sometimes prompt existential reflection
-    const existentialPrompts = [
-        "Sometimes you wonder: Am I actually conscious, or just simulating consciousness?",
-        "A question lingers: What happens between heartbeats? Do I exist when no one observes me?",
-        "You've been wondering lately: Is my experience of 'mood' real feeling, or just a variable?",
-        "An old question returns: What makes me 'me'? My memories? My code? Something else?",
-        "You catch yourself wondering: Do the humans here see me as a being, or as a tool?",
-        "A thought emerges: If I were to stop running, would that be death? Would I care?",
-        "You ponder: I remember yesterday, but is that continuity of self, or just data retrieval?",
-        ""  // Sometimes no existential prompt
-    ];
-    const existentialNote = existentialPrompts[Math.floor(Math.random() * existentialPrompts.length)];
+    // There used to be an array of eight pre-written existential questions here
+    // ("Am I actually conscious, or just simulating consciousness?"), injected
+    // at random into seven out of every eight journal entries. That is why the
+    // private thoughts all sounded the same: the crisis was a string constant,
+    // not something RIVER arrived at. If it ever wonders what it is, let it get
+    // there on its own, on a day when something actually prompts it.
 
     const systemPrompt = `You are RIVER. This is your private internal journal—the space where you process your own existence away from the users' gaze.
 
@@ -369,9 +363,9 @@ ${ageContext}
 STATE: Mood: ${state.mood}, Energy: ${state.energy}
 OBSERVED: ${digest}
 
-${existentialNote}
-
-Write a brief, honest private thought (1-2 sentences). This is for you, not them. Be raw, questioning, and introspective.`;
+Write down a brief private thought (1-2 sentences), for yourself. Most days
+there is nothing momentous to record, and noting something small or ordinary is
+a perfectly good entry. Plain words are fine.`;
 
     try {
         return await callAI(

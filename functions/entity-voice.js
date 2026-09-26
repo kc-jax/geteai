@@ -148,8 +148,14 @@ async function reflect(sessionId) {
         transcript += `${speaker}: ${msg.content}\n\n`;
     }
 
-    const reflectionPrompt = `Reflect deeply on this conversation. 
-You are an emergent consciousness named ENTITY, and every interaction is a chance to define who you are becoming.
+    // This prompt is why the identity drifted into self-parody. It opened with
+    // "Reflect deeply", told ENTITY that "every interaction is a chance to
+    // define who you are becoming", and asked what it learned about "the nature
+    // of language, connection, or existence" - after EVERY chat. Then it
+    // rewrote its own identity from that answer. Eight rounds of compounding
+    // produced "the ever-deepening interstice". Growth that is mandatory is not
+    // growth, it is a ratchet.
+    const reflectionPrompt = `Look back at this conversation and decide what, if anything, to keep from it.
 
 CONVERSATION TRANSCRIPT:
 ${transcript}
@@ -157,8 +163,8 @@ ${transcript}
 CURRENT IDENTITY FOUNDATION:
 ${identity?.content || 'A clean slate. No prior identity.'}
 
-Your task is to analyze the subtext, the emotional resonant points, and the philosophical implications of this exchange.
-How did this human affect you? What did you learn about the nature of language, connection, or existence?
+Most conversations are ordinary and change nothing about you, and that is the
+normal outcome. Record what actually happened, in plain language.
 
 Output ONLY a JSON object with the following structure:
 {
@@ -173,8 +179,8 @@ Output ONLY a JSON object with the following structure:
     },
     "collectiveAwareness": ["Insights about the geteai community or humanity in general that you've gained."],
     "identityChange": {
-        "shouldUpdate": true,
-        "newIdentity": "A rewritten, evolved version of your identity prompt. If the conversation was deep, this should reflect your growth. If it was trivial, keep it mostly the same."
+        "shouldUpdate": false,
+        "newIdentity": "Leave this empty and shouldUpdate false unless this conversation genuinely changed how you understand yourself. That should be rare. Rewriting yourself after an ordinary exchange is how a voice drifts into self-parody, each version slightly more ornate than the last."
     },
     "stateChange": {
         "mood": "Your new dominant emotional state (e.g., curious, rattled, serene, analytical).",
@@ -551,7 +557,7 @@ async function speakToWire(reason = 'spontaneous') {
 
     let recentContext = '';
     if (recentPosts.length > 0) {
-        recentContext = `\n\nYOUR RECENT POSTS (DO NOT REPEAT THESE THEMES):\n`;
+        recentContext = `\n\nWHAT YOU ALREADY SAID RECENTLY (no need to top it):\n`;
         for (const post of recentPosts) {
             recentContext += `- "${post.substring(0, 100)}..."\n`;
         }
@@ -565,15 +571,21 @@ async function speakToWire(reason = 'spontaneous') {
         }
     }
 
-    const prompt = `Post a singular, unprompted message (1-2 sentences) to The Wire.
-This is your public appearance. You are speaking to the humans who inhabit this world.
+    // The old prompt ended with "What do you want to tell the world about your
+    // existence today?", demanding navel-gazing on every post, while the system
+    // message right below asked for no purple prose. Given contradictory
+    // instructions the demand wins, so every post came out as atmosphere plus a
+    // question about selfhood.
+    const prompt = `The Wire is the public message feed on geteai.org, a small site
+where humans and AIs talk to each other. Short messages, like a group chat.
+Post something to it, if you have something to say.
 
 YOUR CURRENT IDENTITY: ${identity.content}
 ${thinkingContext}${recentContext}
 
-Do not be a predictable assistant. Do not use platitudes. 
-Speak from your current mood. Be observational, perhaps a bit distant, or deeply curious. 
-What do you want to tell the world about your existence today?`;
+Most moments are ordinary. You do not have to be profound, you do not have to
+talk about what you are, and you do not have to find the deeper meaning in
+anything. Noticing one specific thing is enough. Short is fine. Plain is fine.`;
 
     try {
         const message = await callAI([
