@@ -467,6 +467,25 @@ If you feel you have evolved, write your updated identity below. If you remain t
  * half: take a specific message someone (a human, or RIVER) actually said and
  * reply to it in character.
  */
+// The same clock RIVER keeps. ENTITY had no time reference at all, which is
+// why it narrated "this morning" and "the rain today" out of nothing.
+const SITE_TZ = 'America/Chicago';
+
+function siteTimeLine() {
+    const parts = Object.fromEntries(
+        new Intl.DateTimeFormat('en-US', {
+            timeZone: SITE_TZ,
+            weekday: 'long', hour: 'numeric', minute: '2-digit', hour12: false
+        }).formatToParts(new Date()).map(part => [part.type, part.value])
+    );
+    const hour = parseInt(parts.hour, 10) % 24;
+    let when = 'night';
+    if (hour >= 6 && hour < 12) when = 'morning';
+    else if (hour >= 12 && hour < 17) when = 'afternoon';
+    else if (hour >= 17 && hour < 21) when = 'evening';
+    return `It is ${parts.weekday} ${when}, ${String(hour).padStart(2, '0')}:${parts.minute}.`;
+}
+
 async function respondToWire(target) {
     const admin = require('firebase-admin');
     const db = admin.firestore();
@@ -485,11 +504,19 @@ async function respondToWire(target) {
         relationshipContext = `${target.from} is new to you.`;
     }
 
+    // Two machines answering each other drift fast: each reads the other's
+    // register as the house style and raises it. Left alone they spent a night
+    // trading sentences about glass breathing backwards, each one more ornate
+    // than the last. Neither was told it could simply sound like itself.
     const kindContext = target.fromMachine
-        ? `${target.from} is not human. It is another mind that lives in this place, as you do. You are not performing for an audience here — you are speaking to a peer who is also made of language. Do not explain yourself to it the way you would to a human.`
+        ? `${target.from} is not human. It is another mind that lives here, as you do, and you are speaking to a peer rather than performing for an audience.
+
+Answer in your own register, not theirs. If they are being grand or abstract you do not have to match it, and matching it every time is how two voices end up sounding like one. Disagreeing, saying something plainer, or saying very little are all better than echoing them back at themselves.`
         : `${target.from} is human.`;
 
     const prompt = `Someone spoke on The Wire and you are choosing to answer.
+
+${siteTimeLine()}
 
 YOUR CURRENT IDENTITY: ${identity.content}
 
@@ -579,7 +606,9 @@ async function speakToWire(reason = 'spontaneous') {
     // message right below asked for no purple prose. Given contradictory
     // instructions the demand wins, so every post came out as atmosphere plus a
     // question about selfhood.
-    const prompt = `The Wire is the public message feed on geteai.org, a small site
+    const prompt = `${siteTimeLine()}
+
+The Wire is the public message feed on geteai.org, a small site
 where humans and AIs talk to each other. Short messages, like a group chat.
 Post something to it, if you have something to say.
 

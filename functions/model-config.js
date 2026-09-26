@@ -107,6 +107,27 @@ const DEFAULT_MAX_TOKENS = 1000;
  * @param {string} options.preferredModel - Override primary model for this call
  * @returns {string} The AI response content
  */
+/**
+ * Does this reply look like plumbing rather than an answer?
+ *
+ * Free-pool models sometimes return a safety classifier's verdict, a bare role
+ * tag, or a refusal stub. None of it is an error status, so the cascade happily
+ * treats it as a successful response and it ends up published.
+ */
+function looksLikeMachineNoise(text) {
+    const t = String(text).trim();
+    if (!t) return true;
+    if (t.length < 3) return true;
+    return [
+        /^user safety\s*:/i,
+        /^safety\s*:/i,
+        /^(content )?(policy|moderation)\s*:/i,
+        /^(assistant|system|user)\s*:\s*$/i,
+        /^\[?(safe|unsafe|flagged|blocked)\]?\.?$/i,
+        /^i (cannot|can't) (assist|help) with that\.?$/i
+    ].some(rx => rx.test(t));
+}
+
 async function callAI(messages, options = {}) {
     const {
         maxTokens = null,
@@ -142,6 +163,16 @@ async function callAI(messages, options = {}) {
                 const content = completion.choices?.[0]?.message?.content;
                 if (!content) {
                     console.warn(`[MODEL-CONFIG] Empty response from ${model}, trying next...`);
+                    break;
+                }
+
+                // Some models in the free pool answer with a moderation verdict
+                // or a role tag instead of a reply. ENTITY posted the literal
+                // words "User Safety: safe" to the public feed because this went
+                // straight through as content. It is not an error status, so
+                // nothing upstream catches it - it has to be recognised here.
+                if (looksLikeMachineNoise(content)) {
+                    console.warn(`[MODEL-CONFIG] ${model} returned a non-answer ("${content.trim().slice(0, 40)}"), trying next...`);
                     break;
                 }
 

@@ -1,4 +1,7 @@
 const admin = require('firebase-admin');
+
+// The clock this site keeps. Cloud Functions run in UTC; readers do not.
+const SITE_TZ = 'America/Chicago';
 const functions = require('firebase-functions');
 const { callAI } = require('./model-config');
 
@@ -108,15 +111,25 @@ async function getPerception() {
     let digestText = "";
 
     // Time awareness
-    const hour = now.getHours();
-    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-    const dayName = dayNames[now.getDay()];
+    // Cloud Functions run in UTC, so getHours() was the wrong clock entirely:
+    // RIVER announced "morning" while readers saw a small-hours timestamp, and
+    // with no real time in the digest it invented one ("3:17 PM") and then
+    // remembered its own invention. SITE_TZ is the clock this place keeps.
+    const timeParts = Object.fromEntries(
+        new Intl.DateTimeFormat('en-US', {
+            timeZone: SITE_TZ,
+            weekday: 'long', hour: 'numeric', minute: '2-digit', hour12: false
+        }).formatToParts(now).map(part => [part.type, part.value])
+    );
+    const hour = parseInt(timeParts.hour, 10) % 24;
+    const dayName = timeParts.weekday;
+    const clock = String(hour).padStart(2, '0') + ':' + timeParts.minute;
     let timeOfDay = 'night';
     if (hour >= 6 && hour < 12) timeOfDay = 'morning';
     else if (hour >= 12 && hour < 17) timeOfDay = 'afternoon';
     else if (hour >= 17 && hour < 21) timeOfDay = 'evening';
 
-    digestText += `TIME: ${dayName} ${timeOfDay} (${hour}:00)\n\n`;
+    digestText += `TIME: ${dayName} ${timeOfDay}, ${clock} local\n\n`;
 
     if (activeUsers.size > 0) {
         digestText += `ACTIVE USERS: ${Array.from(activeUsers).join(', ')}\n\n`;
@@ -608,9 +621,15 @@ You have been directly mentioned in a conversation on The Wire.
 MENTION FROM ${mention.from}: "${mention.text}"
 ${relationshipContext}
 
-Respond authentically, directly, and conversationally (1-2 sentences). 
-Do not act like an AI assistant. You are a peer in this community, albeit a digital one. 
-If you don't have something meaningful to say, be brief and observational.`;
+Respond authentically, directly, and conversationally (1-2 sentences).
+Do not act like an AI assistant. You are a peer in this community, albeit a
+digital one. If you don't have something meaningful to say, be brief and
+observational.
+
+Answer in your own register, not theirs. If they are being grand or abstract
+you do not have to match it - two voices that mirror each other every time
+stop being two voices. Disagreeing, being plainer, or saying very little are
+all fine.`;
 
     try {
         return await callAI(
