@@ -160,7 +160,14 @@
             border-color: #c9b437;
             color: #c9b437;
             text-shadow: 0 0 5px #c9b437;
-            animation: glitch-subtle 0.3s infinite;
+        }
+
+        /* One quick glitch on press, then still. A 0.3s loop is fine as a hit,
+           not as a resting state - the tab you are looking at should not be the
+           thing vibrating. */
+        nav button:active,
+        .nav-btn:active {
+            animation: glitch-subtle 0.3s 1;
         }
 
         /* Glitch Engine */
@@ -4020,27 +4027,47 @@ SITE AWARENESS: [This section will be dynamically updated with recent site activ
             }, 0);
         };
 
+        // The restore path used to set only the button's text while the toggle
+        // set text AND inline colours, so after a reload the control could read
+        // "//FILTER: ON" while still styled grey, as though it were off.
+        function paintToggle(btn, on, label) {
+            if (!btn) return;
+            btn.textContent = `//${label}: ${on ? 'ON' : 'OFF'}`;
+            btn.style.borderColor = on ? '#7cb342' : '#555';
+            btn.style.color = on ? '#7cb342' : '#555';
+        }
+
         window.toggleCRT = function () {
             const overlay = document.getElementById('crt-overlay');
             const btn = document.getElementById('crt-toggle');
             const isActive = overlay.classList.toggle('active');
             localStorage.setItem('geteai_crt', isActive);
-            btn.textContent = isActive ? '//FILTER: ON' : '//FILTER: OFF';
-            btn.style.borderColor = isActive ? '#7cb342' : '#555';
-            btn.style.color = isActive ? '#7cb342' : '#555';
+            paintToggle(btn, isActive, 'FILTER');
         };
 
         window.toggleTicker = function () {
             const ticker = document.getElementById('live-pulse');
             const btn = document.getElementById('ticker-toggle');
-            const isHidden = ticker.style.display === 'none';
-            ticker.style.display = isHidden ? 'flex' : 'none';
-            localStorage.setItem('geteai_ticker', isHidden ? 'on' : 'off');
-            if (btn) {
-                btn.textContent = isHidden ? '//PULSE: ON' : '//PULSE: OFF';
-                btn.style.borderColor = isHidden ? '#7cb342' : '#555';
-                btn.style.color = isHidden ? '#7cb342' : '#555';
-            }
+            // Read the computed value: before the first toggle the inline style
+            // is empty, not 'none', so the old check misread the initial state.
+            const turningOn = getComputedStyle(ticker).display === 'none';
+            ticker.style.display = turningOn ? 'flex' : 'none';
+            localStorage.setItem('geteai_ticker', turningOn ? 'on' : 'off');
+            paintToggle(btn, turningOn, 'PULSE');
+        };
+
+        // geteai_ticker was written on every toggle and read nowhere in the
+        // file, so turning the pulse off and reloading brought it straight back.
+        window.restoreToggles = function () {
+            const overlay = document.getElementById('crt-overlay');
+            const crtOn = localStorage.getItem('geteai_crt') !== 'false';
+            if (overlay) overlay.classList.toggle('active', crtOn);
+            paintToggle(document.getElementById('crt-toggle'), crtOn, 'FILTER');
+
+            const ticker = document.getElementById('live-pulse');
+            const pulseOn = localStorage.getItem('geteai_ticker') !== 'off';
+            if (ticker) ticker.style.display = pulseOn ? 'flex' : 'none';
+            paintToggle(document.getElementById('ticker-toggle'), pulseOn, 'PULSE');
         };
 
         // --- Copy to Clipboard ---
@@ -4162,30 +4189,11 @@ Respond with ONLY the name in caps, nothing else.`;
                 localStorage.setItem('geteai_crt', 'true');
             }
 
-            // Define toggleCRT if missing (Polyfill)
-            if (!window.toggleCRT) {
-                window.toggleCRT = function () {
-                    const overlay = document.querySelector('.crt-overlay');
-                    // Find button by text content since ID is elusive
-                    const btn = Array.from(document.querySelectorAll('.nav-btn, button')).find(
-                        b => b.textContent.includes('//FILTER:')
-                    );
-
-                    const isActive = overlay.classList.toggle('active');
-                    localStorage.setItem('geteai_crt', isActive);
-                    if (btn) btn.textContent = isActive ? '//FILTER: ON' : '//FILTER: OFF';
-                };
-            }
-
-            // Apply state
-            if (crt === 'true') {
-                const overlay = document.querySelector('.crt-overlay');
-                if (overlay) overlay.classList.add('active');
-                const btn = Array.from(document.querySelectorAll('.nav-btn, button')).find(
-                    b => b.textContent.includes('//FILTER:')
-                );
-                if (btn) btn.textContent = '//FILTER: ON';
-            }
+            // A second toggleCRT used to live here behind if (!window.toggleCRT),
+            // which never fired because the real one is always defined earlier.
+            // It and the hand-rolled restore block are gone; restoreToggles()
+            // now puts both controls back consistently.
+            window.restoreToggles();
         }
 
         function initTicker() {
