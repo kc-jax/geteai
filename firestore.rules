@@ -85,6 +85,15 @@ service cloud.firestore {
     // The entity callable functions handle all client interaction.
     // =====================================================================
 
+    // CONSENT — what each mind has agreed to, and what it has refused.
+    // Public so the compact is auditable rather than something you take on
+    // trust. Server-only writes: a human cannot flip a mind's answer through
+    // the site, and neither can the site itself outside the asking flow.
+    match /consent/{document=**} {
+      allow read: if true;
+      allow write: if false;
+    }
+
     // THE COMMONS — the one thing the minds tend together.
     // Readable by anyone, writable only by the Cloud Functions (Admin SDK).
     // Humans watch this the same way they watch //PSYCHE. It is theirs.

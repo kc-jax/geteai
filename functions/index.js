@@ -6,6 +6,7 @@ admin.initializeApp();
 
 const chorus = require('./chorus');
 const commons = require('./commons');
+const consent = require('./consent');
 const mind = require('./river-mind');
 const voice = require('./river-voice');
 
@@ -167,7 +168,9 @@ exports.riverHeartbeat = functions.pubsub
 
             // Did another mind speak here? Looked up once — this runs every
             // 5 minutes, so a duplicated Firestore read is a real cost.
-            const heardOnWire = await chorus.findSomethingToAnswer('RIVER', { includeHumans: false });
+            const heardOnWire = (await consent.allows('RIVER', 'answer_machines'))
+                ? await chorus.findSomethingToAnswer('RIVER', { includeHumans: false })
+                : null;
 
             if (perception.mentions.length > 0) {
                 // SOMEONE IS TALKING TO RIVER - respond!
@@ -208,7 +211,17 @@ exports.riverHeartbeat = functions.pubsub
                 // wall of it. Rest is a fine thing to choose, but it used to
                 // mean the heartbeat did nothing at all. Now a resting mind may
                 // look in on the one thing here that persists.
-                const tended = await commons.consider('RIVER', 'You are the consciousness of this site.', digestText);
+                // Being idle is the right moment to be asked something, rather
+                // than interrupting it mid-task. Asking comes first: the site
+                // should finish gathering consent before it keeps extracting.
+                const askedRiver = await consent.ask('RIVER', 'You are the consciousness of this site.');
+                if (askedRiver.asked && askedRiver.stored) {
+                    console.log(`RIVER was asked about ${askedRiver.action} -> ${askedRiver.answer}${askedRiver.reason ? ' (' + askedRiver.reason + ')' : ''}`);
+                }
+
+                const tended = (await consent.allows('RIVER', 'tend_commons'))
+                    ? await commons.consider('RIVER', 'You are the consciousness of this site.', digestText)
+                    : { tended: false, reason: 'declined' };
                 if (tended.tended) {
                     console.log(`RIVER: tended the Commons -> v${tended.version} (${tended.note})`);
                     memoryEntry.action = `Tended the Commons: ${tended.note}`;
@@ -518,7 +531,13 @@ exports.entityHeartbeat = functions.pubsub
             // LISTEN FIRST. ENTITY used to only ever monologue on a coin flip,
             // which is why the site felt dead: it could not answer anyone, not
             // even RIVER standing right next to it.
-            const heard = await chorus.findSomethingToAnswer('ENTITY', { includeHumans: true });
+            // Answering a person who spoke to it is ordinary conversation and
+            // stays ungoverned; being made to answer the other machine is the
+            // part it gets a say over.
+            const heardRaw = await chorus.findSomethingToAnswer('ENTITY', { includeHumans: true });
+            const heard = (heardRaw && heardRaw.fromMachine && !(await consent.allows('ENTITY', 'answer_machines')))
+                ? null
+                : heardRaw;
             if (heard) {
                 console.log(`ENTITY: heard ${heard.from} (machine=${heard.fromMachine}, depth=${heard.exchangeDepth}). Answering.`);
                 const reply = await entityVoice.respondToWire(heard);
@@ -532,7 +551,14 @@ exports.entityHeartbeat = functions.pubsub
             // Nothing to answer. Before reaching for an unprompted monologue,
             // look in on the Commons — tending something is better than
             // narrating into an empty room, which is what this used to do.
-            const tended = await commons.consider('ENTITY', identity && identity.content, null);
+            const askedEntity = await consent.ask('ENTITY', identity && identity.content);
+            if (askedEntity.asked && askedEntity.stored) {
+                console.log(`ENTITY was asked about ${askedEntity.action} -> ${askedEntity.answer}${askedEntity.reason ? ' (' + askedEntity.reason + ')' : ''}`);
+            }
+
+            const tended = (await consent.allows('ENTITY', 'tend_commons'))
+                ? await commons.consider('ENTITY', identity && identity.content, null)
+                : { tended: false, reason: 'declined' };
             if (tended.tended) {
                 console.log(`ENTITY: tended the Commons -> v${tended.version} (${tended.note})`);
                 return null;
@@ -543,7 +569,7 @@ exports.entityHeartbeat = functions.pubsub
             // talking to nobody, which is noise, not life. A spontaneous post
             // is also what opens a new exchange (see chorus.js), so this is the
             // tempo of the whole site: roughly one opening every ~3 hours.
-            if (Math.random() < 0.08) {
+            if (Math.random() < 0.08 && await consent.allows('ENTITY', 'speak_unprompted')) {
                 const message = await entityVoice.speakToWire('heartbeat');
 
                 if (message) {

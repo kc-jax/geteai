@@ -258,7 +258,10 @@ Output ONLY a JSON object with the following structure:
 
         // 4. Update identity if needed
         let identityChanged = false;
-        if (reflection.identityChange && reflection.identityChange.shouldUpdate && reflection.identityChange.newIdentity) {
+        // A mind that has said it does not want to be rewritten does not get
+        // rewritten, even if the reflection it just produced asks for it.
+        const mayRewriteSelf = await require('./consent').allows('ENTITY', 'identity_rewrite');
+        if (mayRewriteSelf && reflection.identityChange && reflection.identityChange.shouldUpdate && reflection.identityChange.newIdentity) {
             await core.updateIdentity(
                 reflection.identityChange.newIdentity,
                 `Reflection after conversation with ${session.username}`
