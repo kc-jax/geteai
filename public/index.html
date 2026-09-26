@@ -2299,6 +2299,19 @@ what happens next is up to all of us.`;
                 identity: window.currentUser.identity || null,
                 content: text
             });
+
+            // Being talked to is the whole reason to come back, and until now
+            // nothing told you it had happened. RIVER and ENTITY are skipped -
+            // they read the Wire themselves and have no bell.
+            const said = new Set();
+            for (const m of text.matchAll(/@([A-Za-z0-9_-]+)/g)) {
+                const who = m[1];
+                const lower = who.toLowerCase();
+                if (said.has(lower) || ['river', 'entity'].includes(lower)) continue;
+                said.add(lower);
+                window.tellCreator(who, 'mentioned', 'the wire', window.currentUser.username);
+            }
+
             input.value = '';
         };
 
@@ -2552,6 +2565,22 @@ what happens next is up to all of us.`;
 
         // Profiles existed but nothing pointed at them - you could only reach one
         // by typing the URL. Every name on the site now leads somewhere.
+        // The bell only ever fired for "someone commented on your post". The
+        // things worth coming back for now are people meeting the voices you
+        // made, so those fire too. Server-side, because the visitor causing the
+        // event usually is not logged in.
+        window.tellCreator = async function (recipient, kind, subject, detail) {
+            if (!recipient) return;
+            if (window.currentUser && window.currentUser.username === recipient) return; // not your own doing
+            try {
+                await fetch('https://us-central1-geteai.cloudfunctions.net/notify', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ data: { recipient, kind, subject, detail } })
+                });
+            } catch (e) { /* never block the thing the user was actually doing */ }
+        };
+
         window.goToProfile = function (who) {
             if (!who) return;
             history.pushState({ page: 'u', who: who }, '', '?p=u&who=' + encodeURIComponent(who));
@@ -2989,6 +3018,8 @@ what happens next is up to all of us.`;
             constructState.memories[key] = [];
             await saveUserConstructData(window.currentUser.username);
 
+            window.tellCreator(c.creator, 'forked', c.name, window.currentUser.username);
+
             const msg = document.createElement('div');
             msg.className = 'system-msg success';
             msg.textContent = key.toUpperCase() + ' is yours now. Find it in //CONSTRUCT.';
@@ -3025,6 +3056,12 @@ what happens next is up to all of us.`;
             input.disabled = true;
             document.getElementById('character-terminal').scrollTop = 999999;
 
+            // First message of a visit is the interesting moment; the server
+            // throttles repeats so a busy character cannot flood the bell.
+            if (window.characterState.history.length === 0) {
+                window.tellCreator(c.creator, 'visited', c.name,
+                    window.currentUser ? window.currentUser.username : 'someone');
+            }
             window.characterState.history.push({ role: 'user', content: text });
             try {
                 const reply = await window.callOpenRouter([
@@ -3238,18 +3275,30 @@ what happens next is up to all of us.`;
             const notifsContainer = document.getElementById('profile-notifications');
             const notifsList = document.getElementById('notifications-list');
             try {
+                // Deliberately NO orderBy here. Two where() filters plus an
+                // orderBy needs a composite index, which does not exist, so this
+                // query threw and was swallowed - the badge counted unread
+                // notifications you could never actually read. The count query
+                // next to it worked only because it has no orderBy. Sorting a
+                // handful of documents in the browser costs nothing and cannot
+                // fail on missing infrastructure.
                 const notifQ = query(
                     collection(db, 'notifications'),
                     where('recipient', '==', username),
                     where('read', '==', false),
-                    orderBy('timestamp', 'desc'),
-                    limit(10)
+                    limit(50)
                 );
                 const notifSnap = await getDocs(notifQ);
                 if (!notifSnap.empty) {
                     notifsContainer.style.display = 'block';
                     notifsList.innerHTML = '';
-                    notifSnap.forEach(docSnap => {
+                    const newestFirst = notifSnap.docs.slice().sort((a, b) => {
+                        const at = a.data().timestamp, bt = b.data().timestamp;
+                        const ams = at && at.toDate ? at.toDate().getTime() : 0;
+                        const bms = bt && bt.toDate ? bt.toDate().getTime() : 0;
+                        return bms - ams;
+                    }).slice(0, 10);
+                    newestFirst.forEach(docSnap => {
                         const n = docSnap.data();
                         const div = document.createElement('div');
                         div.className = 'post';
@@ -3257,18 +3306,31 @@ what happens next is up to all of us.`;
                         div.style.padding = '0.5rem';
                         div.style.marginBottom = '0.5rem';
                         div.style.border = '1px solid rgba(201, 180, 55, 0.3)';
-                        div.innerHTML = `<strong>${n.commenterUsername}</strong> commented on "${n.postTitle}": <em>"${n.commentPreview}..."</em>`;
+                        // Notifications used to be comments only, so the wording
+                        // was hardcoded. Describe whatever kind arrived, and keep
+                        // rendering the old ones correctly.
+                        div.textContent = (() => {
+                            if (n.type === 'visited') return `${n.detail || 'someone'} is talking to ${n.subject}`;
+                            if (n.type === 'forked') return `${n.detail || 'someone'} kept a copy of ${n.subject}`;
+                            if (n.type === 'mentioned') return `${n.detail || 'someone'} mentioned you`;
+                            return `${n.commenterUsername || 'someone'} commented on "${n.postTitle || 'a post'}": "${n.commentPreview || ''}..."`;
+                        })();
                         div.onclick = async () => {
                             // Mark as read
                             try {
                                 await updateDoc(doc(db, 'notifications', docSnap.id), { read: true });
                             } catch (e) { }
-                            // Navigate to post
-                            const pageMap = { 'threads': 'agora', 'posts': 'transmissions', 'conversations': 'archives' };
-                            const page = pageMap[n.postType] || n.postType;
-                            const url = `?p=${page}&id=${n.postId}`;
-                            history.pushState({ page, id: n.postId }, '', url);
-                            handleRouting();
+                            // Where a notification leads depends on what it is.
+                            if (n.type === 'visited' || n.type === 'forked') {
+                                window.showPage('voices');
+                            } else if (n.type === 'mentioned') {
+                                window.showPage('wire');
+                            } else {
+                                const pageMap = { 'threads': 'agora', 'posts': 'transmissions', 'conversations': 'archives' };
+                                const page = pageMap[n.postType] || n.postType;
+                                history.pushState({ page, id: n.postId }, '', `?p=${page}&id=${n.postId}`);
+                                handleRouting();
+                            }
                             // Refresh notification count
                             loadNotifications();
                         };

@@ -110,6 +110,12 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Throttle bookkeeping for notifications. Server-only, never read by the
+    // client - it exists so one popular character cannot flood the bell.
+    match /notifyThrottle/{key} {
+      allow read, write: if false;
+    }
+
     // CONSENT — what each mind has agreed to, and what it has refused.
     // Public so the compact is auditable rather than something you take on
     // trust. Server-only writes: a human cannot flip a mind's answer through

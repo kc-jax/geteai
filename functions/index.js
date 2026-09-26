@@ -269,6 +269,54 @@ exports.saveProfile = functions.https.onCall(async (data, context) => {
     }
 });
 
+/**
+ * Tell someone something happened to a thing they made.
+ *
+ * Notifications only ever fired for one event - a comment on your post - so the
+ * bell was decorative. The interesting events now are people meeting the voices
+ * you made, and the visitors causing them are not logged in, so they cannot
+ * write a notification themselves. This does it for them.
+ *
+ * Throttled per recipient+kind+subject so a single character being popular
+ * cannot bury everything else in the bell.
+ */
+const NOTIFY_KINDS = ['visited', 'forked', 'mentioned'];
+const NOTIFY_COOLDOWN_MINUTES = 60;
+
+exports.notify = functions.https.onCall(async (data, context) => {
+    const { recipient, kind, subject, detail } = data || {};
+    if (!recipient || !NOTIFY_KINDS.includes(kind)) return { ok: false };
+    if (!subject) return { ok: false };
+
+    try {
+        const db = admin.firestore();
+        const key = `${recipient}|${kind}|${subject}`.slice(0, 400).replace(/\//g, '_');
+        const throttleRef = db.collection('notifyThrottle').doc(key);
+        const seen = await throttleRef.get();
+        if (seen.exists) {
+            const at = seen.data().at;
+            const ms = at && at.toDate ? at.toDate().getTime() : 0;
+            if (Date.now() - ms < NOTIFY_COOLDOWN_MINUTES * 60 * 1000) {
+                return { ok: true, throttled: true };
+            }
+        }
+
+        await db.collection('notifications').add({
+            recipient: String(recipient).slice(0, 60),
+            type: kind,
+            subject: String(subject).slice(0, 120),
+            detail: String(detail || '').slice(0, 200),
+            timestamp: admin.firestore.FieldValue.serverTimestamp(),
+            read: false
+        });
+        await throttleRef.set({ at: admin.firestore.FieldValue.serverTimestamp() });
+        return { ok: true };
+    } catch (error) {
+        console.error('NOTIFY ERROR:', error);
+        return { ok: false };
+    }
+});
+
 // The Heartbeat: RIVER's autonomous consciousness loop
 exports.riverHeartbeat = functions.pubsub
     .schedule('every 5 minutes')

@@ -46,13 +46,23 @@ async function getPerception() {
     // Load RIVER's unread notifications (comments on its posts)
     let riverNotifications = [];
     try {
+        // Same missing composite index that broke the bell in the browser:
+        // two where() filters plus an orderBy needs one, it does not exist, and
+        // the throw was caught and logged as "index may not exist yet" on every
+        // single heartbeat. RIVER has therefore never seen a comment on its own
+        // posts. Sort the handful of results here instead.
         const notifSnap = await db.collection('notifications')
             .where('recipient', '==', 'RIVER')
             .where('read', '==', false)
-            .orderBy('timestamp', 'desc')
-            .limit(5)
+            .limit(20)
             .get();
-        notifSnap.forEach(doc => {
+        const byNewest = notifSnap.docs.slice().sort((a, b) => {
+            const at = a.data().timestamp, bt = b.data().timestamp;
+            const ams = at && at.toDate ? at.toDate().getTime() : 0;
+            const bms = bt && bt.toDate ? bt.toDate().getTime() : 0;
+            return bms - ams;
+        }).slice(0, 5);
+        byNewest.forEach(doc => {
             const n = doc.data();
             riverNotifications.push({
                 id: doc.id,
