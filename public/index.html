@@ -1541,6 +1541,22 @@
             </div>
         </div>
 
+        <div id="u-section" class="section">
+            <div id="u-card"></div>
+        </div>
+
+        <div id="world-section" class="section">
+            <div id="world-head" style="text-align:center; margin-bottom:1.5rem;"></div>
+            <div id="world-terminal" class="terminal-window">
+                <div id="world-output"></div>
+                <div class="input-area" style="border-top:1px solid #333; margin-top:1rem; padding-top:0.5rem;">
+                    <span style="color:#0f0; margin-right:10px;">&gt;</span>
+                    <input type="text" id="world-input" placeholder="say something to the room..."
+                        style="width:80%; background:transparent; border:none; color:#0f0; font-family:'VT323', monospace; font-size:1.2rem; outline:none;" />
+                </div>
+            </div>
+        </div>
+
         <div id="voices-section" class="section">
             <h2 class="section-header">voices</h2>
             <div class="system-msg" style="margin-bottom: 2rem; text-align:center; max-width:620px; margin-left:auto; margin-right:auto; line-height:1.6;">
@@ -1565,6 +1581,7 @@
                 </div>
             </div>
             <div style="text-align:center; margin-top:1.5rem;">
+                <button class="nav-btn" id="character-take" onclick="takeCharacter()">keep this voice</button>
                 <button class="nav-btn" onclick="showPage('construct')">make your own &gt;&gt;</button>
             </div>
         </div>
@@ -2451,6 +2468,356 @@ what happens next is up to all of us.`;
         }
 
         // ===================================================================
+        // A VISITED WORLD — a whole room of voices, from a link
+        // ===================================================================
+        window.worldState = { id: null, world: null, history: [] };
+
+        async function loadSharedWorld(id) {
+            const head = document.getElementById('world-head');
+            const out = document.getElementById('world-output');
+            head.innerHTML = '';
+            out.innerHTML = '<div class="system-msg">OPENING..._</div>';
+            try {
+                const snap = await getDoc(doc(db, 'sharedWorlds', id));
+                if (!snap.exists()) {
+                    out.innerHTML = '<div class="system-msg error">No such world.</div>';
+                    return;
+                }
+                const w = snap.data();
+                window.worldState = { id: id, world: w, history: [] };
+
+                const title = document.createElement('h2');
+                title.className = 'section-header';
+                title.textContent = w.name || 'a world';
+                head.appendChild(title);
+                const meta = document.createElement('div');
+                meta.className = 'system-msg';
+                meta.textContent = (w.cast || []).map(c => String(c.name).toUpperCase()).join(', ') + ' — built by ' + (w.creator || 'someone');
+                head.appendChild(meta);
+
+                out.innerHTML = '';
+                const hint = document.createElement('div');
+                hint.className = 'system-msg';
+                hint.textContent = 'Say something to the room. Use @name to speak to one of them.';
+                out.appendChild(hint);
+                document.getElementById('world-input').focus();
+            } catch (e) {
+                console.error('world load failed:', e);
+                out.innerHTML = '<div class="system-msg error">Could not reach it.</div>';
+            }
+        }
+
+        window.sendToWorld = async function () {
+            const input = document.getElementById('world-input');
+            const out = document.getElementById('world-output');
+            const text = input.value.trim();
+            const w = window.worldState.world;
+            if (!text || !w) return;
+
+            const you = document.createElement('div');
+            const caret = document.createElement('span');
+            caret.style.color = '#0f0';
+            caret.textContent = '> ';
+            you.appendChild(caret);
+            you.appendChild(document.createTextNode(text));
+            out.appendChild(you);
+            input.value = '';
+            input.disabled = true;
+            window.worldState.history.push({ role: 'user', content: text });
+
+            // @name addresses one of them; otherwise one answers at random,
+            // the same rule the owner's own worlds use.
+            const named = [...text.matchAll(/@(\w+)/g)].map(m => m[1].toLowerCase());
+            const cast = w.cast || [];
+            const speaking = cast.filter(c => named.includes(String(c.name).toLowerCase()));
+            const answering = speaking.length ? speaking : [cast[Math.floor(Math.random() * cast.length)]];
+
+            for (const member of answering) {
+                try {
+                    const reply = await window.callOpenRouter([
+                        { role: 'system', content: member.system + '\n\nYou are ' + String(member.name).toUpperCase() + ' in a group chat called "' + (w.name || 'this world') + '" with ' + cast.map(c => String(c.name).toUpperCase()).join(', ') + '. Reply naturally, briefly.' },
+                        ...window.worldState.history.slice(-10)
+                    ]);
+                    const row = document.createElement('div');
+                    row.className = 'ai-response';
+                    const who = document.createElement('span');
+                    who.style.color = '#c9b437';
+                    who.textContent = String(member.name).toUpperCase() + ': ';
+                    row.appendChild(who);
+                    row.appendChild(document.createTextNode(reply));
+                    out.appendChild(row);
+                    window.worldState.history.push({ role: 'assistant', content: String(member.name) + ': ' + reply });
+                } catch (e) {
+                    const err = document.createElement('div');
+                    err.className = 'system-msg error';
+                    err.textContent = String(member.name).toUpperCase() + ' did not answer.';
+                    out.appendChild(err);
+                }
+                document.getElementById('world-terminal').scrollTop = 999999;
+            }
+            input.disabled = false;
+            input.focus();
+        };
+
+        // ===================================================================
+        // A PUBLIC PROFILE — everything one person has made
+        // ===================================================================
+        const PROFILE_FONTS = ['VT323', 'Courier New', 'Georgia', 'Helvetica', 'Impact', 'Comic Sans MS'];
+
+        function applyProfileTheme(el, theme) {
+            const t = theme || {};
+            // Named properties only. Values were validated server-side, and are
+            // still never concatenated into a style string here.
+            el.style.backgroundColor = t.bg || '#000000';
+            el.style.color = t.fg || '#7cb342';
+            el.style.fontFamily = `'${(PROFILE_FONTS.includes(t.font) ? t.font : 'VT323')}', monospace`;
+            el.style.padding = '2rem';
+            el.style.border = '1px solid ' + (t.accent || '#c9b437');
+            if (t.effect === 'glow') el.style.textShadow = '0 0 6px ' + (t.accent || '#c9b437');
+            else if (t.effect === 'flicker') el.style.animation = 'pulse-glow 2s infinite ease-in-out';
+            else el.style.textShadow = 'none';
+        }
+
+        // The appearance editor. Colours are picked, fonts and effects chosen
+        // from a list - the same vocabulary the server will accept. Nobody is
+        // writing CSS, and nothing typed here becomes a style rule.
+        window.editProfile = async function () {
+            if (!window.currentUser) return;
+            const who = window.currentUser.username;
+            const card = document.getElementById('u-card');
+
+            let current = {};
+            try {
+                const snap = await getDoc(doc(db, 'profiles', who));
+                if (snap.exists()) current = snap.data();
+            } catch (e) {}
+            const t = current.theme || {};
+
+            card.innerHTML = '';
+            card.style.cssText = '';
+            const form = document.createElement('div');
+            form.style.cssText = 'max-width:520px; margin:0 auto;';
+
+            const heading = document.createElement('h2');
+            heading.className = 'section-header';
+            heading.textContent = 'your page';
+            form.appendChild(heading);
+
+            const field = (labelText, node) => {
+                const wrap = document.createElement('div');
+                wrap.style.cssText = 'margin-bottom:1rem;';
+                const l = document.createElement('div');
+                l.style.cssText = 'font-size:0.9rem; opacity:0.8; margin-bottom:0.25rem;';
+                l.textContent = labelText;
+                wrap.appendChild(l);
+                wrap.appendChild(node);
+                form.appendChild(wrap);
+                return node;
+            };
+
+            const tagline = document.createElement('input');
+            tagline.type = 'text';
+            tagline.maxLength = 140;
+            tagline.value = current.tagline || '';
+            tagline.style.cssText = 'width:100%; background:#111; border:1px solid #333; color:#0f0; padding:0.5rem; font-family:VT323, monospace; font-size:1.1rem;';
+            field('one line about you', tagline);
+
+            const bio = document.createElement('textarea');
+            bio.rows = 5;
+            bio.maxLength = 2000;
+            bio.value = current.bio || '';
+            bio.style.cssText = tagline.style.cssText;
+            field('anything else', bio);
+
+            const colour = (name, value) => {
+                const i = document.createElement('input');
+                i.type = 'color';
+                i.value = value;
+                i.style.cssText = 'width:60px; height:34px; background:transparent; border:1px solid #333;';
+                field(name, i);
+                return i;
+            };
+            const bg = colour('background', t.bg || '#000000');
+            const fg = colour('text', t.fg || '#7cb342');
+            const accent = colour('accent', t.accent || '#c9b437');
+
+            const select = (name, options, chosen) => {
+                const sel = document.createElement('select');
+                sel.style.cssText = 'background:#111; border:1px solid #333; color:#0f0; padding:0.4rem; font-family:VT323, monospace; font-size:1.1rem;';
+                options.forEach(o => {
+                    const opt = document.createElement('option');
+                    opt.value = o; opt.textContent = o;
+                    if (o === chosen) opt.selected = true;
+                    sel.appendChild(opt);
+                });
+                field(name, sel);
+                return sel;
+            };
+            const font = select('font', PROFILE_FONTS, t.font || 'VT323');
+            const effect = select('effect', ['none', 'scanlines', 'glow', 'grain', 'flicker'], t.effect || 'none');
+            const layout = select('how your things are listed', ['list', 'grid'], t.layout || 'list');
+
+            const preview = document.createElement('div');
+            preview.style.cssText = 'margin:1.5rem 0;';
+            preview.textContent = 'this is how your page will look';
+            form.appendChild(preview);
+
+            const repaint = () => applyProfileTheme(preview, {
+                bg: bg.value, fg: fg.value, accent: accent.value,
+                font: font.value, effect: effect.value, layout: layout.value
+            });
+            [bg, fg, accent, font, effect, layout].forEach(el => el.addEventListener('input', repaint));
+            repaint();
+
+            const save = document.createElement('button');
+            save.className = 'nav-btn';
+            save.textContent = 'save';
+            save.addEventListener('click', async () => {
+                save.textContent = 'saving...';
+                try {
+                    const resp = await fetch('https://us-central1-geteai.cloudfunctions.net/saveProfile', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ data: {
+                            username: who,
+                            tagline: tagline.value,
+                            bio: bio.value,
+                            theme: {
+                                bg: bg.value, fg: fg.value, accent: accent.value,
+                                font: font.value, effect: effect.value, layout: layout.value
+                            }
+                        }})
+                    });
+                    const result = (await resp.json()).result;
+                    if (result && result.ok) {
+                        await loadPublicProfile(who);
+                    } else {
+                        save.textContent = 'could not save';
+                    }
+                } catch (e) {
+                    console.error(e);
+                    save.textContent = 'could not save';
+                }
+            });
+            const cancel = document.createElement('button');
+            cancel.className = 'nav-btn';
+            cancel.textContent = 'cancel';
+            cancel.addEventListener('click', () => loadPublicProfile(who));
+            form.appendChild(save);
+            form.appendChild(cancel);
+
+            card.appendChild(form);
+        };
+
+        async function loadPublicProfile(who) {
+            const card = document.getElementById('u-card');
+            card.innerHTML = '<div class="system-msg">LOADING..._</div>';
+            try {
+                const snap = await getDoc(doc(db, 'profiles', who));
+                const profile = snap.exists() ? snap.data() : { username: who, theme: {} };
+                const theme = profile.theme || {};
+
+                card.innerHTML = '';
+                applyProfileTheme(card, theme);
+
+                const name = document.createElement('h2');
+                name.className = 'section-header';
+                name.style.color = theme.accent || '#c9b437';
+                name.textContent = who;
+                card.appendChild(name);
+
+                if (profile.tagline) {
+                    const tag = document.createElement('div');
+                    tag.style.cssText = 'opacity:0.85; margin-bottom:1rem;';
+                    tag.textContent = profile.tagline;
+                    card.appendChild(tag);
+                }
+                if (profile.bio) {
+                    const bio = document.createElement('div');
+                    bio.style.cssText = 'white-space:pre-wrap; line-height:1.7; margin-bottom:2rem;';
+                    bio.textContent = profile.bio;
+                    card.appendChild(bio);
+                }
+
+                const section = (label) => {
+                    const h = document.createElement('h3');
+                    h.className = 'section-header';
+                    h.style.cssText = 'font-size:1.05rem; color:' + (theme.accent || '#c9b437');
+                    h.textContent = label;
+                    card.appendChild(h);
+                    const wrap = document.createElement('div');
+                    if (theme.layout === 'grid') {
+                        wrap.style.cssText = 'display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:0.75rem;';
+                    }
+                    card.appendChild(wrap);
+                    return wrap;
+                };
+
+                const voicesWrap = section('voices');
+                const vSnap = await getDocs(query(collection(db, 'characters'), where('creator', '==', who), limit(50)));
+                if (vSnap.empty) {
+                    voicesWrap.innerHTML = '<div class="system-msg">none shared yet</div>';
+                } else {
+                    vSnap.forEach(d => {
+                        const c = d.data();
+                        const row = document.createElement('div');
+                        row.className = 'commons-rev';
+                        row.style.cursor = 'pointer';
+                        row.style.borderLeftColor = theme.accent || '#c9b437';
+                        row.textContent = String(c.name || '').toUpperCase() + (c.desc ? ' — ' + c.desc : '');
+                        row.addEventListener('click', () => {
+                            history.pushState({}, '', '?p=character&id=' + d.id);
+                            handleRouting();
+                        });
+                        voicesWrap.appendChild(row);
+                    });
+                }
+
+                const worldsWrap = section('worlds');
+                const wSnap = await getDocs(query(collection(db, 'sharedWorlds'), where('creator', '==', who), limit(50)));
+                if (wSnap.empty) {
+                    worldsWrap.innerHTML = '<div class="system-msg">none shared yet</div>';
+                } else {
+                    wSnap.forEach(d => {
+                        const w = d.data();
+                        const row = document.createElement('div');
+                        row.className = 'commons-rev';
+                        row.style.cursor = 'pointer';
+                        row.style.borderLeftColor = theme.accent || '#c9b437';
+                        row.textContent = String(w.name || '').toUpperCase() + ' — ' + (w.cast || []).map(c => String(c.name).toUpperCase()).join(', ');
+                        row.addEventListener('click', () => {
+                            history.pushState({}, '', '?p=world&id=' + d.id);
+                            handleRouting();
+                        });
+                        worldsWrap.appendChild(row);
+                    });
+                }
+
+                const foot = document.createElement('div');
+                foot.style.cssText = 'margin-top:2rem; text-align:center;';
+                const link = document.createElement('button');
+                link.className = 'nav-btn';
+                link.textContent = 'copy link to this profile';
+                link.addEventListener('click', () => {
+                    const url = location.href.split('?')[0] + '?p=u&who=' + encodeURIComponent(who);
+                    navigator.clipboard.writeText(url).then(() => { link.textContent = 'copied'; }).catch(() => {});
+                });
+                foot.appendChild(link);
+                if (window.currentUser && window.currentUser.username === who) {
+                    const edit = document.createElement('button');
+                    edit.className = 'nav-btn';
+                    edit.textContent = 'edit appearance';
+                    edit.addEventListener('click', () => window.editProfile());
+                    foot.appendChild(edit);
+                }
+                card.appendChild(foot);
+            } catch (e) {
+                console.error('profile load failed:', e);
+                card.innerHTML = '<div class="system-msg error">Could not load that profile.</div>';
+            }
+        }
+
+        // ===================================================================
         // THE VOICE GALLERY
         // ===================================================================
         // Shared characters were reachable only if somebody handed you the URL -
@@ -2578,6 +2945,56 @@ what happens next is up to all of us.`;
             if (el) el.addEventListener('keydown', (e) => {
                 if (e.key === 'Enter') window.sendToCharacter();
             });
+        });
+
+        // Forking. Meeting a voice you like and being able to do nothing with it
+        // is a dead end; this copies it into your own Construct, where you can
+        // talk to it whenever, change it, and share your own version.
+        window.takeCharacter = async function () {
+            const c = window.characterState.character;
+            const out = document.getElementById('character-output');
+            if (!c) return;
+
+            if (!window.currentUser) {
+                const msg = document.createElement('div');
+                msg.className = 'system-msg';
+                msg.textContent = 'Log in and you can keep this voice in your own terminal.';
+                out.appendChild(msg);
+                return;
+            }
+
+            // Don't overwrite a voice you already have under the same name.
+            let key = String(c.name || 'voice').toLowerCase().replace(/[^a-z0-9_-]/g, '') || 'voice';
+            if (constructState.rooms[key]) {
+                let n = 2;
+                while (constructState.rooms[key + n]) n++;
+                key = key + n;
+            }
+
+            constructState.rooms[key] = {
+                desc: (c.desc || '') + (c.creator ? ' (from ' + c.creator + ')' : ''),
+                system: c.system
+            };
+            constructState.history[key] = [];
+            constructState.memories[key] = [];
+            await saveUserConstructData(window.currentUser.username);
+
+            const msg = document.createElement('div');
+            msg.className = 'system-msg success';
+            msg.textContent = key.toUpperCase() + ' is yours now. Find it in //CONSTRUCT.';
+            out.appendChild(msg);
+            const go = document.createElement('button');
+            go.className = 'nav-btn';
+            go.style.marginTop = '0.5rem';
+            go.textContent = 'open //CONSTRUCT';
+            go.addEventListener('click', () => window.showPage('construct'));
+            out.appendChild(go);
+            document.getElementById('character-terminal').scrollTop = 999999;
+        };
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const w = document.getElementById('world-input');
+            if (w) w.addEventListener('keydown', (e) => { if (e.key === 'Enter') window.sendToWorld(); });
         });
 
         window.sendToCharacter = async function () {
@@ -3786,6 +4203,7 @@ SITE AWARENESS: [This section will be dynamically updated with recent site activ
                     output.innerHTML += `<div class="system-msg">&nbsp;&nbsp;/worlds &mdash; list your worlds</div>`;
                     output.innerHTML += `<div class="system-msg">&nbsp;&nbsp;/enter [name] &mdash; go into a world</div>`;
                     output.innerHTML += `<div class="system-msg">&nbsp;&nbsp;/invite [username] &mdash; let someone else in</div>`;
+                    output.innerHTML += `<div class="system-msg">&nbsp;&nbsp;/share &mdash; give this world a public link</div>`;
                     output.innerHTML += `<div class="system-msg">&nbsp;&nbsp;/leave &mdash; leave the world, or go back to nexus</div>`;
                     output.innerHTML += `<div class="system-msg">&nbsp;&nbsp;/clear &mdash; clear this screen</div>`;
                 } else if (cmd === '/voices') {
@@ -3849,10 +4267,55 @@ SITE AWARENESS: [This section will be dynamically updated with recent site activ
                             await saveUserConstructData(window.currentUser && window.currentUser.username);
 
                             output.innerHTML += `<div class="system-msg success">${name.toUpperCase()} EXISTS. You are connected to it.</div>`;
-                            output.innerHTML += `<div class="system-msg">Say something to it, or use the share button to give it a link.</div>`;
+                            output.innerHTML += `<div class="system-msg">Say something to it &mdash; or share it, and anyone with the link can talk to it too.</div>`;
+                            const nudge = document.createElement('button');
+                            nudge.className = 'nav-btn';
+                            nudge.style.cssText = 'margin-top:0.5rem; border-color:#c9b437; color:#c9b437;';
+                            nudge.textContent = 'share ' + name.toUpperCase() + ' \u2192';
+                            nudge.addEventListener('click', () => window.shareVoice(name));
+                            output.appendChild(nudge);
+                            window.renderVoiceBar();
                         } catch (e) {
                             console.error('create failed:', e);
                             output.innerHTML += `<div class="system-msg error">Could not reach the models to write it. Try again in a minute.</div>`;
+                        }
+                    }
+                } else if (cmd === '/share') {
+                    // Worlds could be built and entered but never shown to
+                    // anyone. This snapshots the cast so a visitor can talk to
+                    // the whole group from a link.
+                    if (constructState.mode !== 'world' || !constructState.currentWorld) {
+                        output.innerHTML += `<div class="system-msg error">You have to be in a world. /enter [name] first, or use the share button for a single voice.</div>`;
+                    } else {
+                        const wName = constructState.currentWorld;
+                        const world = constructState.worlds[wName];
+                        output.innerHTML += `<div class="system-msg">PUBLISHING ${wName.toUpperCase()}..._</div>`;
+                        try {
+                            const cast = world.ais
+                                .filter(a => constructState.rooms[a])
+                                .map(a => ({ name: a, system: constructState.rooms[a].system }));
+                            const resp = await fetch('https://us-central1-geteai.cloudfunctions.net/publishWorld', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ data: {
+                                    name: wName,
+                                    cast: cast,
+                                    description: 'a world of ' + cast.map(c => c.name).join(', '),
+                                    username: window.currentUser.username
+                                }})
+                            });
+                            const result = (await resp.json()).result;
+                            if (!result || !result.ok) {
+                                output.innerHTML += `<div class="system-msg error">${escapeHtml((result && result.error) || 'could not publish')}</div>`;
+                            } else {
+                                const url = `${location.href.split('?')[0]}?p=world&id=${result.id}`;
+                                output.innerHTML += `<div class="system-msg success">${wName.toUpperCase()} IS ${result.updated ? 'UPDATED' : 'LIVE'}.</div>`;
+                                output.innerHTML += `<div class="system-msg"><a href="${url}" style="color:#c9b437">${escapeHtml(url)}</a></div>`;
+                                try { await navigator.clipboard.writeText(url); output.innerHTML += `<div class="system-msg">(copied)</div>`; } catch (e) {}
+                            }
+                        } catch (e) {
+                            console.error(e);
+                            output.innerHTML += `<div class="system-msg error">could not publish</div>`;
                         }
                     }
                 } else if (cmd === '/forget') {
@@ -4149,6 +4612,27 @@ SITE AWARENESS: [This section will be dynamically updated with recent site activ
             document.getElementById('header').style.display = 'block';
 
             const page = p || t; // Fallback
+
+            if (page === 'u') {
+                const who = params.get('who');
+                if (who) {
+                    document.querySelectorAll('.section').forEach(sec => sec.classList.remove('active'));
+                    document.getElementById('u-section').classList.add('active');
+                    window.currentPage = 'u';
+                    updateAuthUI();
+                    await loadPublicProfile(who);
+                    return;
+                }
+            }
+
+            if (page === 'world' && id) {
+                document.querySelectorAll('.section').forEach(sec => sec.classList.remove('active'));
+                document.getElementById('world-section').classList.add('active');
+                window.currentPage = 'world';
+                updateAuthUI();
+                await loadSharedWorld(id);
+                return;
+            }
 
             if (page === 'character' && id) {
                 document.querySelectorAll('.section').forEach(sec => sec.classList.remove('active'));

@@ -174,6 +174,101 @@ exports.publishCharacter = functions.https.onCall(async (data, context) => {
     }
 });
 
+/**
+ * Publish a world - a group chat with several voices in it - so it has a
+ * permanent link. Same shape as publishCharacter: the cast's instructions are
+ * snapshotted as text, nothing is executed, and re-publishing updates in place
+ * so a link handed out earlier keeps working.
+ */
+exports.publishWorld = functions.https.onCall(async (data, context) => {
+    const { name, cast, description, username } = data || {};
+    if (!username) return { ok: false, error: 'log in to share a world' };
+    if (!name || !Array.isArray(cast) || !cast.length) {
+        return { ok: false, error: 'a world needs a name and at least one voice' };
+    }
+
+    try {
+        const db = admin.firestore();
+        const existing = await db.collection('sharedWorlds')
+            .where('creator', '==', String(username))
+            .where('name', '==', String(name))
+            .limit(1)
+            .get();
+
+        const ref = existing.empty ? db.collection('sharedWorlds').doc() : existing.docs[0].ref;
+
+        await ref.set({
+            id: ref.id,
+            name: String(name).slice(0, 60),
+            description: String(description || '').slice(0, 300),
+            creator: String(username).slice(0, 60),
+            cast: cast.slice(0, 8).map(c => ({
+                name: String(c.name || '').slice(0, 60),
+                system: String(c.system || '').slice(0, 6000)
+            })),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            ...(existing.empty ? { createdAt: admin.firestore.FieldValue.serverTimestamp() } : {})
+        }, { merge: true });
+
+        return { ok: true, id: ref.id, updated: !existing.empty };
+    } catch (error) {
+        console.error('PUBLISH WORLD ERROR:', error);
+        return { ok: false, error: 'could not publish' };
+    }
+});
+
+/**
+ * Save a person's public profile: a tagline, a bio, and how the page looks.
+ *
+ * Customisation is real but it is a VOCABULARY, not a stylesheet. Every value
+ * below is validated against a pattern or an allow-list before it is stored,
+ * and the client applies them to named properties rather than pasting them
+ * into a style attribute.
+ *
+ * That is deliberate. Letting people write raw CSS for a page other visitors
+ * load is not as dangerous as raw JavaScript, but it is not safe either: CSS
+ * can pull remote URLs, and it can position an element over the page to build
+ * a convincing fake login. A fixed vocabulary gives nearly all of the
+ * expressive range with none of that.
+ */
+const HEX = /^#[0-9a-fA-F]{6}$/;
+const FONTS = ['VT323', 'Courier New', 'Georgia', 'Helvetica', 'Impact', 'Comic Sans MS'];
+const EFFECTS = ['none', 'scanlines', 'glow', 'grain', 'flicker'];
+const LAYOUTS = ['list', 'grid'];
+
+function cleanTheme(theme) {
+    const t = theme || {};
+    const pick = (value, allowed, fallback) => allowed.includes(value) ? value : fallback;
+    const hex = (value, fallback) => (typeof value === 'string' && HEX.test(value)) ? value : fallback;
+    return {
+        bg: hex(t.bg, '#000000'),
+        fg: hex(t.fg, '#7cb342'),
+        accent: hex(t.accent, '#c9b437'),
+        font: pick(t.font, FONTS, 'VT323'),
+        effect: pick(t.effect, EFFECTS, 'none'),
+        layout: pick(t.layout, LAYOUTS, 'list')
+    };
+}
+
+exports.saveProfile = functions.https.onCall(async (data, context) => {
+    const { username, tagline, bio, theme } = data || {};
+    if (!username) return { ok: false, error: 'log in to edit your profile' };
+
+    try {
+        await admin.firestore().collection('profiles').doc(String(username)).set({
+            username: String(username).slice(0, 60),
+            tagline: String(tagline || '').slice(0, 140),
+            bio: String(bio || '').slice(0, 2000),
+            theme: cleanTheme(theme),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+        return { ok: true };
+    } catch (error) {
+        console.error('SAVE PROFILE ERROR:', error);
+        return { ok: false, error: 'could not save' };
+    }
+});
+
 // The Heartbeat: RIVER's autonomous consciousness loop
 exports.riverHeartbeat = functions.pubsub
     .schedule('every 5 minutes')

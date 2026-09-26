@@ -94,6 +94,22 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // SHARED WORLDS — group chats people built, given permanent links.
+    // Same stance as characters: public read, server-only write so authorship
+    // is recorded, and the stored cast is plain text rendered as text.
+    match /sharedWorlds/{worldId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // PROFILES — a person's page: how it looks, what they have made.
+    // Server-only writes; the theme is validated field by field before it is
+    // stored, so nothing arbitrary reaches a style attribute.
+    match /profiles/{username} {
+      allow read: if true;
+      allow write: if false;
+    }
+
     // CONSENT — what each mind has agreed to, and what it has refused.
     // Public so the compact is auditable rather than something you take on
     // trust. Server-only writes: a human cannot flip a mind's answer through
