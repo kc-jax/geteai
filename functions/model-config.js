@@ -81,7 +81,10 @@ const MODEL_CASCADE = [
     'poolside/laguna-s-2.1:free',                          // 262K ctx — clean output, solid quality
     'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free',   // 256K ctx — fast (~0.9s), clean output
     'google/gemma-4-31b-it:free',                           // 262K ctx — strong, but often rate-limited
-    'nvidia/nemotron-nano-12b-v2-vl:free',                  // 128K ctx — clean output
+    // nvidia/nemotron-nano-12b-v2-vl removed 2026-09-26: verified working by
+    // direct call on 08-23, returning 404 "no endpoints found" a month later.
+    // Free ids rot fast — run scripts/check-models.js rather than trusting this
+    // list, or the site breaks in a way that looks like a code bug.
     'openrouter/free'                                       // ← SAFETY NET: router picks any working free model
 ];
 
