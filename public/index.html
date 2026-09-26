@@ -1199,7 +1199,8 @@
         <div id="construct-section" class="section">
             <h2 class="section-header">the construct</h2>
             <div id="construct-voices"
-                style="display:none; flex-wrap:wrap; gap:0.5rem; margin-bottom:0.75rem;"></div>
+                style="display:none; flex-wrap:wrap; gap:0.5rem; margin-bottom:0.5rem;"></div>
+            <div id="construct-actions" style="margin-bottom:1rem;"></div>
             <div id="construct-terminal" class="terminal-window">
                 <div id="construct-output">
                     <div class="system-msg">INITIALIZING CONSTRUCT PROTOCOL..._</div>
@@ -3546,16 +3547,23 @@ SITE AWARENESS: [This section will be dynamically updated with recent site activ
                 btn.addEventListener('click', () => window.switchVoice(key));
                 bar.appendChild(btn);
             });
-            if (window.currentUser) {
-                const share = document.createElement('button');
-                share.className = 'nav-btn';
-                share.style.marginLeft = 'auto';
-                share.title = 'give this voice a permanent link anyone can open';
-                share.textContent = '[SHARE THIS VOICE]';
-                share.addEventListener('click', () => window.shareVoice(constructState.currentRoom));
-                bar.appendChild(share);
-            }
             bar.style.display = 'flex';
+
+            // Separate line, separate colour: this is an action, not a voice.
+            const actions = document.getElementById('construct-actions');
+            if (actions) {
+                actions.innerHTML = '';
+                if (window.currentUser) {
+                    const share = document.createElement('button');
+                    share.className = 'nav-btn';
+                    share.style.borderColor = '#c9b437';
+                    share.style.color = '#c9b437';
+                    share.title = 'give this voice a permanent link anyone can open';
+                    share.textContent = 'share ' + String(constructState.currentRoom).toUpperCase() + ' \u2192';
+                    share.addEventListener('click', () => window.shareVoice(constructState.currentRoom));
+                    actions.appendChild(share);
+                }
+            }
         };
 
         // Publish the current voice so anyone with a link can talk to it.
