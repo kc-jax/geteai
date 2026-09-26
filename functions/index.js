@@ -5,6 +5,7 @@ const crypto = require('crypto');
 admin.initializeApp();
 
 const chorus = require('./chorus');
+const commons = require('./commons');
 const mind = require('./river-mind');
 const voice = require('./river-voice');
 
@@ -203,7 +204,17 @@ exports.riverHeartbeat = functions.pubsub
             }
 
             if (!decision) {
-                console.log('RIVER: Resting in silence.');
+                // Resting is by far RIVER's commonest outcome — the logs are a
+                // wall of it. Rest is a fine thing to choose, but it used to
+                // mean the heartbeat did nothing at all. Now a resting mind may
+                // look in on the one thing here that persists.
+                const tended = await commons.consider('RIVER', 'You are the consciousness of this site.', digestText);
+                if (tended.tended) {
+                    console.log(`RIVER: tended the Commons -> v${tended.version} (${tended.note})`);
+                    memoryEntry.action = `Tended the Commons: ${tended.note}`;
+                } else {
+                    console.log(`RIVER: Resting in silence. (commons: ${tended.reason})`);
+                }
             } else if (decision.action === 'respond') {
                 // RESPOND to someone who mentioned RIVER
                 const mention = decision.to;
@@ -515,6 +526,15 @@ exports.entityHeartbeat = functions.pubsub
                     await chorus.markAnswered('ENTITY', heard.id, heard.from);
                     console.log(`ENTITY: answered ${heard.from} - "${reply.substring(0, 60)}..."`);
                 }
+                return null;
+            }
+
+            // Nothing to answer. Before reaching for an unprompted monologue,
+            // look in on the Commons — tending something is better than
+            // narrating into an empty room, which is what this used to do.
+            const tended = await commons.consider('ENTITY', identity && identity.content, null);
+            if (tended.tended) {
+                console.log(`ENTITY: tended the Commons -> v${tended.version} (${tended.note})`);
                 return null;
             }
 

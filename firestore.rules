@@ -85,6 +85,14 @@ service cloud.firestore {
     // The entity callable functions handle all client interaction.
     // =====================================================================
 
+    // THE COMMONS — the one thing the minds tend together.
+    // Readable by anyone, writable only by the Cloud Functions (Admin SDK).
+    // Humans watch this the same way they watch //PSYCHE. It is theirs.
+    match /commons/{document=**} {
+      allow read: if true;
+      allow write: if false;
+    }
+
     match /river/{document=**} {
       allow read: if true;   // Allow reading RIVER's public state/posts
       allow write: if false;  // Only Cloud Functions (Admin SDK) can write
