@@ -31,6 +31,19 @@ if errorlevel 1 (
 )
 
 echo.
+echo [0b/3] Checking nothing calls a function that no longer exists...
+REM c8589fa deleted ~700 lines from public/index.html and took the Construct's
+REM whole command set with it. Deletions leave call sites pointing at nothing,
+REM and in a browser that only fails when a user clicks - quietly, one feature
+REM at a time, long after the commit looked fine.
+call node scripts\check-calls.js
+if errorlevel 1 (
+    echo.
+    echo ABORTING: a call has no definition.
+    goto :end
+)
+
+echo.
 echo [1/3] Deploying Firestore Rules...
 call firebase deploy --only firestore:rules --project geteai
 if errorlevel 1 goto :failed
