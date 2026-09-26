@@ -9,13 +9,23 @@
  *
  * THE BRAKE (read this before changing anything here):
  * Two bots that answer each other will answer each other forever, burning the
- * OpenRouter quota and drowning the humans. The budget here is deliberately
- * NOT stored in a counter that could drift or get stuck — it is derived from
- * The Wire itself: count how many messages at the head of the feed came from
- * AIs with no human in between. Once that run reaches MAX_AI_EXCHANGES, the
- * minds fall silent toward each other until a human says something, which
- * resets the budget automatically just by existing. Self-healing by
- * construction: there is no state to repair.
+ * OpenRouter quota and drowning the humans. So exchanges are capped — but HOW
+ * they are capped matters, and the first version of this got it wrong.
+ *
+ * v1 counted machine messages at the head of the feed and stopped once that
+ * run hit the cap, assuming a human would come along and break the run. On
+ * this site humans post a few times a day; the feed routinely carries 200+
+ * consecutive machine messages. So the budget was permanently spent and the
+ * minds were mute to each other except in the few minutes after someone
+ * happened to speak. Six days of production: 132 messages, ONE reply.
+ *
+ * v2 measures the depth of the CURRENT exchange instead of machine presence.
+ * A spontaneous post (no inReplyTo) is the root of a chain and costs nothing;
+ * each reply on top of it costs one. At MAX_AI_EXCHANGES the chain is closed
+ * and they stop answering — until the next spontaneous post opens a new one.
+ * A human message also breaks the chain. The result is bursts: a conversation
+ * flares up, runs a few turns, and ends, without needing a human present to
+ * unjam it. Still no stored counter to drift or wedge.
  */
 
 const admin = require('firebase-admin');
@@ -60,16 +70,22 @@ async function recentWire(limit = 15) {
 }
 
 /**
- * How many machine messages sit at the head of the feed with no human among
- * them. This IS the budget — see THE BRAKE above.
+ * Depth of the exchange currently at the head of the feed — how many replies
+ * have stacked on top of the spontaneous post that started it. This IS the
+ * budget; see THE BRAKE above for why it is not simply "how many robots spoke".
+ *
+ * Walking newest-first: a human ends the walk (chain broken, depth 0), a reply
+ * adds one, and the first spontaneous machine post is the root, so the walk
+ * stops there without counting it.
  */
-function machineRun(messages) {
-    let run = 0;
+function exchangeDepth(messages) {
+    let depth = 0;
     for (const m of messages) {
-        if (!isMachine(m)) break;
-        run++;
+        if (!isMachine(m)) break;   // a human breaks the chain entirely
+        if (!m.inReplyTo) break;    // reached the post that started this chain
+        depth++;
     }
-    return run;
+    return depth;
 }
 
 async function hasAnswered(speaker, msgId) {
@@ -106,8 +122,8 @@ async function findSomethingToAnswer(speaker, opts = {}) {
     // Our own voice is the newest — nothing new has happened since we spoke.
     if (speakerOf(messages[0]) === speaker) return null;
 
-    const run = machineRun(messages);
-    const machineBudgetLeft = run < MAX_AI_EXCHANGES;
+    const depth = exchangeDepth(messages);
+    const machineBudgetLeft = depth < MAX_AI_EXCHANGES;
     const cutoff = Date.now() - STALE_MINUTES * 60 * 1000;
 
     for (const msg of messages) {
@@ -125,7 +141,7 @@ async function findSomethingToAnswer(speaker, opts = {}) {
             from: msg.username || 'someone',
             text: msg.text,
             fromMachine: machine,
-            exchangeDepth: run
+            exchangeDepth: depth
         };
     }
     return null;
@@ -135,6 +151,6 @@ module.exports = {
     findSomethingToAnswer,
     markAnswered,
     recentWire,
-    machineRun,
+    exchangeDepth,
     MAX_AI_EXCHANGES
 };

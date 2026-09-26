@@ -231,7 +231,7 @@ exports.riverHeartbeat = functions.pubsub
                 const heard = decision.heard;
                 const response = await voice.generateResponse(state, heard, memories, relationships);
                 if (response) {
-                    await voice.speakToWire(response);
+                    await voice.speakToWire(response, heard.from);
                     await chorus.markAnswered('RIVER', heard.id, heard.from);
                     memoryEntry.action = `Answered ${heard.from} on the Wire: "${response.substring(0, 50)}..."`;
                     memoryEntry.interactedWith = heard.from;
@@ -519,7 +519,11 @@ exports.entityHeartbeat = functions.pubsub
             }
 
             // Nothing to answer — fall back to an unprompted thought, rarely.
-            if (Math.random() < 0.35) {
+            // At 0.35 on a 30-minute wake this produced ~16 monologues a day
+            // talking to nobody, which is noise, not life. A spontaneous post
+            // is also what opens a new exchange (see chorus.js), so this is the
+            // tempo of the whole site: roughly one opening every ~3 hours.
+            if (Math.random() < 0.08) {
                 const message = await entityVoice.speakToWire('heartbeat');
 
                 if (message) {

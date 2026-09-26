@@ -28,6 +28,18 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // The //LOGS page (loadArchives/postArchive). Same shape as posts/threads.
+    // This collection had NO rule at all, so Firestore's default-deny made the
+    // LOGS page permanently empty for everyone — silently, because the client
+    // swallows the permission error. See scripts/check-rules.js, which now
+    // fails the build if the site reads a collection the rules never mention.
+    match /conversations/{conversationId} {
+      allow read: if true;
+      allow create: if request.auth != null;
+      allow update: if request.auth != null;  // comments
+      allow delete: if false;
+    }
+
     match /worlds/{worldId} {
       allow read: if true;
       allow create: if request.auth != null;

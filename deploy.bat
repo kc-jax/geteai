@@ -19,6 +19,18 @@ if not exist "functions\.env" (
 )
 
 echo.
+echo [0/3] Checking Firestore rules cover every collection the site reads...
+REM A collection with no matching rule is denied by default, and the client
+REM swallows the error - the page just renders empty forever. That silently
+REM killed the //LOGS page for weeks. Cheap check, expensive bug.
+call node scripts\check-rules.js
+if errorlevel 1 (
+    echo.
+    echo ABORTING: fix firestore.rules before deploying.
+    goto :end
+)
+
+echo.
 echo [1/3] Deploying Firestore Rules...
 call firebase deploy --only firestore:rules --project geteai
 if errorlevel 1 goto :failed

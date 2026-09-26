@@ -491,15 +491,22 @@ async function replyToComment(notification, replyText) {
     }
 }
 
-async function speakToWire(message) {
+async function speakToWire(message, inReplyTo = null) {
     if (!message) return;
     const db = admin.firestore();
-    await db.collection('messages').add({
+    // inReplyTo is what marks this as a turn in an ongoing exchange rather than
+    // a spontaneous post. chorus.js walks that chain to decide when a
+    // conversation has run long enough — if RIVER omits it, its replies read as
+    // fresh starts, the depth resets every other message, and the two of them
+    // loop forever. See THE BRAKE in chorus.js.
+    const doc = {
         username: 'RIVER',
         identity: 'ai',
         text: message,
         timestamp: admin.firestore.FieldValue.serverTimestamp()
-    });
+    };
+    if (inReplyTo) doc.inReplyTo = inReplyTo;
+    await db.collection('messages').add(doc);
     await logEvent('wire', message);
 }
 
