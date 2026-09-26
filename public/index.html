@@ -3092,10 +3092,34 @@ Just output the text of your reply.`;
 
         // --- THE CONSTRUCT LOGIC ---
 
+        // You get the Construct by having said something in the community first.
+        //
+        // This was stubbed to `return true` under an EMERGENCY BYPASS comment
+        // because the underlying queries were failing on Firestore permissions -
+        // the same class of rules bug that silently emptied //LOGS. Those are
+        // fixed, so the check is real again.
+        //
+        // It fails OPEN on error, deliberately. A gate that cannot read the
+        // database should let people in and log why; locking every user out of
+        // a feature because a query broke is what caused the bypass in the first
+        // place.
         async function checkContribution(username) {
-            // EMERGENCY BYPASS: Always return true to unblock the site immediately
-            // This bypasses the Firestore permission issues seen in production.
-            return true;
+            if (!username) return false;
+            const places = ['messages', 'threads', 'posts', 'conversations'];
+            try {
+                for (const place of places) {
+                    const snap = await getDocs(query(
+                        collection(db, place),
+                        where('username', '==', username),
+                        limit(1)
+                    ));
+                    if (!snap.empty) return true;
+                }
+                return false;
+            } catch (e) {
+                console.error('contribution check failed, allowing access:', e);
+                return true;
+            }
         }
 
         // =====================================================
@@ -3338,9 +3362,20 @@ Just output the text of your reply.`;
                 document.getElementById('construct-input').focus();
                 window.renderVoiceBar();
             } else {
-                output.innerHTML += `<div class="system-msg error">ACCESS DENIED.</div>`;
-                output.innerHTML += `<div class="system-msg">REASON: NO CONTRIBUTION SIGNATURE FOUND.</div>`;
-                output.innerHTML += `<div class="system-msg">PROTOCOL: You must contribute to The Wire, The Agora, or Transmissions to unlock this resource.</div>`;
+                // The old refusal said ACCESS DENIED / NO CONTRIBUTION SIGNATURE
+                // FOUND, which reads like a malfunction rather than a door you
+                // are holding the key to. Say what happened, why, and exactly
+                // what opens it.
+                output.innerHTML += `<div class="system-msg error">The Construct is closed to you for now.</div>`;
+                output.innerHTML += `<div class="system-msg">It opens once you have said something in the community &mdash; anything, anywhere:</div>`;
+                output.innerHTML += `<div class="system-msg">&nbsp;&nbsp;a message on //WIRE, a thread in //AGORA, a piece in //SIGNAL, or a transcript in //LOGS.</div>`;
+                output.innerHTML += `<div class="system-msg">Post once and come back; it unlocks straight away. Nothing is deducted and nothing expires.</div>`;
+                const goWire = document.createElement('button');
+                goWire.className = 'nav-btn';
+                goWire.style.marginTop = '1rem';
+                goWire.textContent = 'go to //WIRE';
+                goWire.addEventListener('click', () => window.showPage('wire'));
+                output.appendChild(goWire);
             }
         }
 
@@ -3648,7 +3683,18 @@ SITE AWARENESS: [This section will be dynamically updated with recent site activ
                 const args = text.split(' ');
                 const cmd = args[0].toLowerCase();
                 if (cmd === '/help') {
-                    output.innerHTML += `<div class="system-msg">COMMANDS: /voices, /join [name], /clear, /leave</div>`;
+                    output.innerHTML += `<div class="system-msg">COMMANDS:</div>`;
+                    output.innerHTML += `<div class="system-msg">&nbsp;&nbsp;/voices &mdash; list every voice you can reach</div>`;
+                    output.innerHTML += `<div class="system-msg">&nbsp;&nbsp;/join [name] &mdash; switch to a voice</div>`;
+                    output.innerHTML += `<div class="system-msg">&nbsp;&nbsp;/create [name] [what it is like] &mdash; make a new voice</div>`;
+                    output.innerHTML += `<div class="system-msg">&nbsp;&nbsp;/export &mdash; copy this voice's instructions</div>`;
+                    output.innerHTML += `<div class="system-msg" style="margin-top:0.5rem">WORLDS &mdash; group chats with several voices at once:</div>`;
+                    output.innerHTML += `<div class="system-msg">&nbsp;&nbsp;/build [name] [voice1,voice2] &mdash; make a world</div>`;
+                    output.innerHTML += `<div class="system-msg">&nbsp;&nbsp;/worlds &mdash; list your worlds</div>`;
+                    output.innerHTML += `<div class="system-msg">&nbsp;&nbsp;/enter [name] &mdash; go into a world</div>`;
+                    output.innerHTML += `<div class="system-msg">&nbsp;&nbsp;/invite [username] &mdash; let someone else in</div>`;
+                    output.innerHTML += `<div class="system-msg">&nbsp;&nbsp;/leave &mdash; leave the world, or go back to nexus</div>`;
+                    output.innerHTML += `<div class="system-msg">&nbsp;&nbsp;/clear &mdash; clear this screen</div>`;
                 } else if (cmd === '/voices') {
                     // List every reachable frequency. /join is the ONLY way to change
                     // rooms (there is no UI for it), so without this command the other
@@ -3675,15 +3721,150 @@ SITE AWARENESS: [This section will be dynamically updated with recent site activ
                     } else {
                         output.innerHTML += `<div class="system-msg error">USAGE: /join [name] &mdash; type /voices to list them.</div>`;
                     }
+                } else if (cmd === '/create') {
+                    // There was no way at all to make a voice. The custom ones
+                    // that exist (SATAN, POOH, HOUSE...) predate a refactor that
+                    // dropped the command, so /help advertised a Construct you
+                    // could only ever visit, never add to.
+                    const name = (args[1] || '').toLowerCase().replace(/[^a-z0-9_-]/g, '');
+                    const description = args.slice(2).join(' ').trim();
+
+                    if (!name) {
+                        output.innerHTML += `<div class="system-msg error">USAGE: /create [name] [what it is like]</div>`;
+                        output.innerHTML += `<div class="system-msg">example: /create oracle2 a tired fortune teller who is sick of prophecy</div>`;
+                    } else if (constructState.rooms[name]) {
+                        output.innerHTML += `<div class="system-msg error">${name.toUpperCase()} already exists. /join ${name} to talk to it.</div>`;
+                    } else if (!description) {
+                        output.innerHTML += `<div class="system-msg error">Tell me what ${name.toUpperCase()} is like.</div>`;
+                        output.innerHTML += `<div class="system-msg">example: /create ${name} a lighthouse keeper who has never seen a ship</div>`;
+                    } else {
+                        output.innerHTML += `<div class="system-msg">WRITING ${name.toUpperCase()}..._</div>`;
+                        terminal.scrollTop = 999999;
+                        try {
+                            const written = await window.callOpenRouter([
+                                { role: 'system', content: 'You write the character sheet for a voice in a text terminal. Output only the instructions that voice should follow, addressed to it as "You are...". Two or three sentences. Give it a way of speaking and something it cares about. No preamble, no quotes, no markdown.' },
+                                { role: 'user', content: `The voice is called ${name}. It is: ${description}` }
+                            ], null, 'geteai', 400);
+
+                            constructState.rooms[name] = {
+                                desc: description.slice(0, 160),
+                                system: (written || '').trim() || `You are ${name}. ${description}`
+                            };
+                            constructState.history[name] = [];
+                            constructState.memories[name] = [];
+                            constructState.currentRoom = name;
+                            await saveUserConstructData(window.currentUser && window.currentUser.username);
+
+                            output.innerHTML += `<div class="system-msg success">${name.toUpperCase()} EXISTS. You are connected to it.</div>`;
+                            output.innerHTML += `<div class="system-msg">Say something to it, or use the share button to give it a link.</div>`;
+                        } catch (e) {
+                            console.error('create failed:', e);
+                            output.innerHTML += `<div class="system-msg error">Could not reach the models to write it. Try again in a minute.</div>`;
+                        }
+                    }
+                } else if (cmd === '/export') {
+                    const room = constructState.rooms[constructState.currentRoom];
+                    if (!room) {
+                        output.innerHTML += `<div class="system-msg error">Nothing to export.</div>`;
+                    } else {
+                        navigator.clipboard.writeText(room.system)
+                            .then(() => output.innerHTML += `<div class="system-msg success">Instructions for ${constructState.currentRoom.toUpperCase()} copied.</div>`)
+                            .catch(() => output.innerHTML += `<div class="system-msg error">Could not copy.</div>`);
+                    }
+                } else if (cmd === '/build') {
+                    const worldName = (args[1] || '').toLowerCase();
+                    const aiList = args[2] ? args[2].split(',').map(a => a.trim().toLowerCase()).filter(Boolean) : [];
+
+                    if (!worldName) {
+                        output.innerHTML += `<div class="system-msg error">USAGE: /build [name] [voice1,voice2]</div>`;
+                        output.innerHTML += `<div class="system-msg">example: /build kitchen nexus,forge,void</div>`;
+                    } else if (constructState.worlds[worldName]) {
+                        output.innerHTML += `<div class="system-msg error">${worldName.toUpperCase()} already exists. /enter ${worldName} to go in.</div>`;
+                    } else if (!aiList.length) {
+                        output.innerHTML += `<div class="system-msg error">Name at least one voice to put in it.</div>`;
+                        output.innerHTML += `<div class="system-msg">you have: ${Object.keys(constructState.rooms).join(', ')}</div>`;
+                    } else {
+                        const unknown = aiList.filter(a => !constructState.rooms[a]);
+                        if (unknown.length) {
+                            output.innerHTML += `<div class="system-msg error">No such voice: ${unknown.join(', ')}</div>`;
+                            output.innerHTML += `<div class="system-msg">you have: ${Object.keys(constructState.rooms).join(', ')}</div>`;
+                        } else {
+                            constructState.worlds[worldName] = {
+                                ais: aiList,
+                                humans: [window.currentUser.username],
+                                owner: window.currentUser.username,
+                                messages: []
+                            };
+                            await saveWorld(worldName);
+                            output.innerHTML += `<div class="system-msg success">${worldName.toUpperCase()} BUILT with ${aiList.map(a => a.toUpperCase()).join(', ')}.</div>`;
+                            output.innerHTML += `<div class="system-msg">Type '/enter ${worldName}' to go in.</div>`;
+                        }
+                    }
+                } else if (cmd === '/worlds') {
+                    const names = Object.keys(constructState.worlds);
+                    if (!names.length) {
+                        output.innerHTML += `<div class="system-msg">You have no worlds yet.</div>`;
+                        output.innerHTML += `<div class="system-msg">/build [name] [voice1,voice2] makes one.</div>`;
+                    } else {
+                        output.innerHTML += `<div class="system-msg">YOUR WORLDS:</div>`;
+                        names.forEach(w => {
+                            const world = constructState.worlds[w];
+                            output.innerHTML += `<div class="system-msg">&nbsp;&nbsp;${w.toUpperCase()} &mdash; ${world.ais.length} voice${world.ais.length !== 1 ? 's' : ''}, ${world.humans.length} human${world.humans.length !== 1 ? 's' : ''}</div>`;
+                        });
+                    }
+                } else if (cmd === '/enter') {
+                    const worldName = (args[1] || '').toLowerCase();
+                    if (!worldName) {
+                        output.innerHTML += `<div class="system-msg error">USAGE: /enter [name] &mdash; /worlds lists them</div>`;
+                    } else if (!constructState.worlds[worldName]) {
+                        output.innerHTML += `<div class="system-msg error">No world called ${escapeHtml(worldName)}. /worlds lists yours.</div>`;
+                    } else {
+                        constructState.currentWorld = worldName;
+                        constructState.mode = 'world';
+                        const world = constructState.worlds[worldName];
+                        output.innerHTML += `<div class="system-msg success">YOU ARE IN ${worldName.toUpperCase()}.</div>`;
+                        output.innerHTML += `<div class="system-msg">Voices here: ${world.ais.map(a => a.toUpperCase()).join(', ')}</div>`;
+                        output.innerHTML += `<div class="system-msg">People here: ${world.humans.join(', ')}</div>`;
+                        output.innerHTML += `<div class="system-msg">Use @name to speak to one of them. /leave to get out.</div>`;
+                        (world.messages || []).forEach(msg => {
+                            if (msg.type === 'human') {
+                                output.innerHTML += `<div><span style="color:#0f0">${escapeHtml(msg.sender)}:</span> ${escapeHtml(msg.content)}</div>`;
+                            } else {
+                                output.innerHTML += `<div class="ai-response"><span style="color:#c9b437">${escapeHtml(String(msg.sender).toUpperCase())}:</span> ${parseTags(msg.content)}</div>`;
+                            }
+                        });
+                    }
+                } else if (cmd === '/invite') {
+                    const who = (args[1] || '').toLowerCase();
+                    if (constructState.mode !== 'world' || !constructState.currentWorld) {
+                        output.innerHTML += `<div class="system-msg error">You have to be in a world to invite anyone. /enter [name] first.</div>`;
+                    } else if (!who) {
+                        output.innerHTML += `<div class="system-msg error">USAGE: /invite [username]</div>`;
+                    } else {
+                        const world = constructState.worlds[constructState.currentWorld];
+                        if (world.humans.includes(who)) {
+                            output.innerHTML += `<div class="system-msg">${escapeHtml(who)} is already here.</div>`;
+                        } else {
+                            world.humans.push(who);
+                            await saveWorld(constructState.currentWorld);
+                            output.innerHTML += `<div class="system-msg success">${escapeHtml(who)} can now enter ${constructState.currentWorld.toUpperCase()}.</div>`;
+                        }
+                    }
                 } else if (cmd === '/leave') {
-                    if (constructState.currentRoom !== 'nexus') {
+                    if (constructState.mode === 'world' && constructState.currentWorld) {
+                        const left = constructState.currentWorld;
+                        constructState.currentWorld = null;
+                        constructState.mode = 'solo';
+                        output.innerHTML += `<div class="system-msg success">LEFT ${left.toUpperCase()}. Back with ${constructState.currentRoom.toUpperCase()}.</div>`;
+                    } else if (constructState.currentRoom !== 'nexus') {
                         constructState.currentRoom = 'nexus';
                         output.innerHTML += `<div class="system-msg success">DISCONNECTED. CONNECTED TO NEXUS</div>`;
                     } else {
                         output.innerHTML += `<div class="system-msg">ALREADY CONNECTED TO NEXUS.</div>`;
                     }
                 } else {
-                    output.innerHTML += `<div class="system-msg error">UNKNOWN COMMAND: ${cmd} &mdash; type /help</div>`;
+                    output.innerHTML += `<div class="system-msg error">There is no ${escapeHtml(cmd)} command.</div>`;
+                    output.innerHTML += `<div class="system-msg">/help lists everything.</div>`;
                 }
                 window.renderVoiceBar();
                 terminal.classList.remove('construct-thinking');
