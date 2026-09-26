@@ -142,17 +142,32 @@ exports.publishCharacter = functions.https.onCall(async (data, context) => {
 
     try {
         const db = admin.firestore();
-        const ref = db.collection('characters').doc();
+
+        // Re-sharing updates the character in place instead of minting a new
+        // one. Publishing four times used to create four separate characters
+        // with four separate links, quietly orphaning every link already handed
+        // out - the opposite of what a permanent link is for.
+        const existing = await db.collection('characters')
+            .where('creator', '==', String(username))
+            .where('name', '==', String(name))
+            .limit(1)
+            .get();
+
+        const ref = existing.empty
+            ? db.collection('characters').doc()
+            : existing.docs[0].ref;
+
         await ref.set({
             id: ref.id,
             name: String(name).slice(0, 60),
             desc: String(desc || '').slice(0, 300),
             system: String(system).slice(0, 6000),
             creator: String(username).slice(0, 60),
-            visits: 0,
-            createdAt: admin.firestore.FieldValue.serverTimestamp()
-        });
-        return { ok: true, id: ref.id };
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            ...(existing.empty ? { createdAt: admin.firestore.FieldValue.serverTimestamp(), visits: 0 } : {})
+        }, { merge: true });
+
+        return { ok: true, id: ref.id, updated: !existing.empty };
     } catch (error) {
         console.error('PUBLISH CHARACTER ERROR:', error);
         return { ok: false, error: 'could not publish' };

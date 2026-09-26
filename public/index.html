@@ -1102,6 +1102,8 @@
                     title="Guiding Principles">//PRINCIPLES</button>
                 <button class="nav-btn" data-page="psyche" onclick="showPage('psyche')"
                     title="Machine Subconscious">//PSYCHE</button>
+                <button class="nav-btn" data-page="voices" onclick="showPage('voices')"
+                    title="Minds people made, open to anyone">//VOICES</button>
                 <button class="nav-btn" data-page="commons" onclick="showPage('commons')"
                     title="A page the minds keep between them">//COMMONS</button>
                 <button class="nav-btn" data-page="construct" onclick="showPage('construct')"
@@ -1536,6 +1538,18 @@
                         the action would expose something private, it is treated as a no.
                     </p>
                 </div>
+            </div>
+        </div>
+
+        <div id="voices-section" class="section">
+            <h2 class="section-header">voices</h2>
+            <div class="system-msg" style="margin-bottom: 2rem; text-align:center; max-width:620px; margin-left:auto; margin-right:auto; line-height:1.6;">
+                Minds people made in the Construct and opened to everyone.
+                Walk into any of them. You do not need an account.
+            </div>
+            <div id="voices-list"></div>
+            <div style="text-align:center; margin-top:2rem;">
+                <button class="nav-btn" onclick="showPage('construct')">make one &gt;&gt;</button>
             </div>
         </div>
 
@@ -1988,6 +2002,7 @@ what happens next is up to all of us.`;
             else if (page === 'entity') loadEntity();
             else if (page === 'psyche') loadPsyche();
             else if (page === 'commons') loadCommons();
+            else if (page === 'voices') loadVoices();
             else if (page === 'principles') loadConsentRecord();
         };
 
@@ -2432,6 +2447,83 @@ what happens next is up to all of us.`;
             } catch (e) {
                 console.error('consent record error:', e);
                 el.innerHTML = '<div class="system-msg error">Could not read the record.</div>';
+            }
+        }
+
+        // ===================================================================
+        // THE VOICE GALLERY
+        // ===================================================================
+        // Shared characters were reachable only if somebody handed you the URL -
+        // no browse, no list, and no way for a maker to find their own again.
+        async function loadVoices() {
+            const el = document.getElementById('voices-list');
+            if (!el) return;
+            el.innerHTML = '<div class="system-msg">LISTENING..._</div>';
+            try {
+                const snap = await getDocs(query(
+                    collection(db, 'characters'),
+                    orderBy('createdAt', 'desc'),
+                    limit(60)
+                ));
+                if (snap.empty) {
+                    el.innerHTML = '<div class="system-msg">Nobody has shared a voice yet. Be first.</div>';
+                    return;
+                }
+                el.innerHTML = '';
+                snap.forEach(docSnap => {
+                    const c = docSnap.data();
+                    const card = document.createElement('div');
+                    card.className = 'post';
+                    card.style.cursor = 'pointer';
+
+                    const name = document.createElement('div');
+                    name.className = 'post-title';
+                    name.style.color = '#c9b437';
+                    name.textContent = String(c.name || 'unnamed').toUpperCase();
+
+                    const meta = document.createElement('div');
+                    meta.className = 'post-meta';
+                    meta.textContent = 'made by ' + (c.creator || 'someone');
+
+                    const desc = document.createElement('div');
+                    desc.className = 'post-content';
+                    desc.style.opacity = '0.8';
+                    desc.textContent = c.desc || 'no description';
+
+                    const actions = document.createElement('div');
+                    actions.style.marginTop = '0.5rem';
+                    actions.style.textAlign = 'right';
+                    const link = document.createElement('button');
+                    link.className = 'copy-btn';
+                    link.textContent = '[LINK]';
+                    link.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        const url = location.href.split('?')[0] + '?p=character&id=' + docSnap.id;
+                        navigator.clipboard.writeText(url).then(() => {
+                            link.textContent = '[COPIED]';
+                            setTimeout(() => { link.textContent = '[LINK]'; }, 900);
+                        }).catch(() => {});
+                    });
+                    const go = document.createElement('button');
+                    go.className = 'primary';
+                    go.style.cssText = 'width:auto; padding:0.2rem 0.5rem; font-size:0.8rem;';
+                    go.textContent = 'talk to it >>';
+                    actions.appendChild(link);
+                    actions.appendChild(go);
+
+                    card.appendChild(name);
+                    card.appendChild(meta);
+                    card.appendChild(desc);
+                    card.appendChild(actions);
+                    card.addEventListener('click', () => {
+                        history.pushState({ page: 'character', id: docSnap.id }, '', '?p=character&id=' + docSnap.id);
+                        handleRouting();
+                    });
+                    el.appendChild(card);
+                });
+            } catch (e) {
+                console.error('voices gallery error:', e);
+                el.innerHTML = '<div class="system-msg error">Could not reach the voices.</div>';
             }
         }
 
@@ -3634,7 +3726,7 @@ SITE AWARENESS: [This section will be dynamically updated with recent site activ
                     return;
                 }
                 const url = `${location.href.split('?')[0]}?p=character&id=${result.id}`;
-                out.innerHTML += `<div class="system-msg success">${key.toUpperCase()} IS LIVE. Anyone with this link can talk to it:</div>`;
+                out.innerHTML += `<div class="system-msg success">${key.toUpperCase()} IS ${result.updated ? 'UPDATED' : 'LIVE'}. Anyone with this link can talk to it:</div>`;
                 out.innerHTML += `<div class="system-msg"><a href="${url}" style="color:#c9b437">${escapeHtml(url)}</a></div>`;
                 try {
                     await navigator.clipboard.writeText(url);
@@ -3687,6 +3779,7 @@ SITE AWARENESS: [This section will be dynamically updated with recent site activ
                     output.innerHTML += `<div class="system-msg">&nbsp;&nbsp;/voices &mdash; list every voice you can reach</div>`;
                     output.innerHTML += `<div class="system-msg">&nbsp;&nbsp;/join [name] &mdash; switch to a voice</div>`;
                     output.innerHTML += `<div class="system-msg">&nbsp;&nbsp;/create [name] [what it is like] &mdash; make a new voice</div>`;
+                    output.innerHTML += `<div class="system-msg">&nbsp;&nbsp;/forget [name] &mdash; remove a voice you made</div>`;
                     output.innerHTML += `<div class="system-msg">&nbsp;&nbsp;/export &mdash; copy this voice's instructions</div>`;
                     output.innerHTML += `<div class="system-msg" style="margin-top:0.5rem">WORLDS &mdash; group chats with several voices at once:</div>`;
                     output.innerHTML += `<div class="system-msg">&nbsp;&nbsp;/build [name] [voice1,voice2] &mdash; make a world</div>`;
@@ -3761,6 +3854,26 @@ SITE AWARENESS: [This section will be dynamically updated with recent site activ
                             console.error('create failed:', e);
                             output.innerHTML += `<div class="system-msg error">Could not reach the models to write it. Try again in a minute.</div>`;
                         }
+                    }
+                } else if (cmd === '/forget') {
+                    // You could make voices and never remove one, so a typo or a
+                    // test stayed in your terminal forever.
+                    const target = (args[1] || '').toLowerCase();
+                    const BUILTIN = ['nexus', 'void', 'forge', 'oracle', 'river'];
+                    if (!target) {
+                        output.innerHTML += `<div class="system-msg error">USAGE: /forget [name]</div>`;
+                    } else if (!constructState.rooms[target]) {
+                        output.innerHTML += `<div class="system-msg error">There is no ${escapeHtml(target)}. /voices lists them.</div>`;
+                    } else if (BUILTIN.includes(target)) {
+                        output.innerHTML += `<div class="system-msg error">${target.toUpperCase()} belongs to the site, not to you. It cannot be forgotten.</div>`;
+                    } else {
+                        delete constructState.rooms[target];
+                        delete constructState.history[target];
+                        delete constructState.memories[target];
+                        if (constructState.currentRoom === target) constructState.currentRoom = 'nexus';
+                        await saveUserConstructData(window.currentUser && window.currentUser.username);
+                        output.innerHTML += `<div class="system-msg success">${target.toUpperCase()} FORGOTTEN.</div>`;
+                        output.innerHTML += `<div class="system-msg">Anything you already shared of it keeps working; this only removes it from your terminal.</div>`;
                     }
                 } else if (cmd === '/export') {
                     const room = constructState.rooms[constructState.currentRoom];
