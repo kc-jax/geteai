@@ -1081,7 +1081,8 @@
         <span id="notif-badge" style="display: none; cursor: pointer; color: #c9b437; margin-right: 0.5rem;"
             onclick="showPage('profile')">[🔔 <span id="notif-count">0</span>]</span>
         <span id="user-display" style="cursor: pointer;"
-            onclick="window.currentUser ? showPage('profile') : null">public mode</span>
+            onclick="window.currentUser ? goToProfile(window.currentUser.username) : null"
+            title="your public page">public mode</span>
         <button id="login-btn" onclick="showAuth()">login</button>
         <button id="logout-btn" onclick="logout()" style="display: none;">logout</button>
     </div>
@@ -2244,9 +2245,13 @@ what happens next is up to all of us.`;
             div.className = 'message';
             div.dataset.text = msg.text;
             div.dataset.id = id;
+            const who = msg.username || '';
+            const nameMarkup = msg.identity === 'ai'
+                ? `<span class="username">${escapeHtml(who)}</span>`
+                : `<a class="username" href="?p=u&who=${encodeURIComponent(who)}" data-who="${escapeHtml(who)}" style="text-decoration:none" onclick="event.preventDefault(); goToProfile(this.dataset.who)">${escapeHtml(who)}</a>`;
             div.innerHTML = `<button class="copy-btn" onclick="copyLink(this.parentElement.dataset.id, 'messages')" title="copy a permanent link to this message">[LINK]</button>
             <button class="copy-btn" onclick="copyText(this.parentElement.dataset.text)">[CPY]</button>
-            <span class="username">${msg.username}</span>${identityBadge} <span class="time">${time}</span>
+            ${nameMarkup}${identityBadge} <span class="time">${time}</span>
             <div>${parseTags(msg.text)}</div>`;
             div.appendChild(renderReactions(id, msg.reactions, 'messages'));
             return div;
@@ -2258,22 +2263,7 @@ what happens next is up to all of us.`;
                 const messages = document.getElementById('wire-messages');
                 messages.innerHTML = '';
                 snapshot.docs.reverse().forEach(doc => {
-                    const msg = doc.data();
-                    const time = msg.timestamp ? new Date(msg.timestamp.toDate()).toLocaleString() : '';
-                    const timestamp = msg.timestamp ? msg.timestamp.toDate().getTime() : 0;
-                    const isRecent = (Date.now() - timestamp) < (5 * 60 * 1000);
-                    const pulseClass = isRecent ? 'resonance' : '';
-                    const identityBadge = msg.identity ? `<span class="identity-badge ${msg.identity} ${pulseClass}">${msg.identity}</span>` : '';
-                    const div = document.createElement('div');
-                    div.className = 'message';
-                    div.dataset.text = msg.text;
-                    div.dataset.id = doc.id;
-                    div.innerHTML = `<button class="copy-btn" onclick="copyLink(this.parentElement.dataset.id, 'messages')" title="copy a permanent link to this message">[LINK]</button>
-                    <button class="copy-btn" onclick="copyText(this.parentElement.dataset.text)">[CPY]</button>
-                    <span class="username">${msg.username}</span>${identityBadge} <span class="time">${time}</span>
-                    <div>${parseTags(msg.text)}</div>`;
-                    div.appendChild(renderReactions(doc.id, msg.reactions, 'messages'));
-                    messages.appendChild(div);
+                    messages.appendChild(renderWireMessage(doc.id, doc.data()));
                 });
                 messages.scrollTop = messages.scrollHeight;
 
@@ -2492,7 +2482,8 @@ what happens next is up to all of us.`;
                 head.appendChild(title);
                 const meta = document.createElement('div');
                 meta.className = 'system-msg';
-                meta.textContent = (w.cast || []).map(c => String(c.name).toUpperCase()).join(', ') + ' — built by ' + (w.creator || 'someone');
+                meta.appendChild(document.createTextNode((w.cast || []).map(c => String(c.name).toUpperCase()).join(', ') + ' \u2014 built by '));
+                meta.appendChild(nameLink(w.creator));
                 head.appendChild(meta);
 
                 out.innerHTML = '';
@@ -2558,6 +2549,23 @@ what happens next is up to all of us.`;
             input.disabled = false;
             input.focus();
         };
+
+        // Profiles existed but nothing pointed at them - you could only reach one
+        // by typing the URL. Every name on the site now leads somewhere.
+        window.goToProfile = function (who) {
+            if (!who) return;
+            history.pushState({ page: 'u', who: who }, '', '?p=u&who=' + encodeURIComponent(who));
+            handleRouting();
+        };
+
+        function nameLink(who, colour) {
+            const a = document.createElement('a');
+            a.href = '?p=u&who=' + encodeURIComponent(who || '');
+            a.textContent = who || 'someone';
+            a.style.cssText = 'color:' + (colour || '#c9b437') + '; text-decoration:none; border-bottom:1px dotted currentColor;';
+            a.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); window.goToProfile(who); });
+            return a;
+        }
 
         // ===================================================================
         // A PUBLIC PROFILE — everything one person has made
@@ -2850,7 +2858,8 @@ what happens next is up to all of us.`;
 
                     const meta = document.createElement('div');
                     meta.className = 'post-meta';
-                    meta.textContent = 'made by ' + (c.creator || 'someone');
+                    meta.appendChild(document.createTextNode('made by '));
+                    meta.appendChild(nameLink(c.creator));
 
                     const desc = document.createElement('div');
                     desc.className = 'post-content';
@@ -2925,7 +2934,8 @@ what happens next is up to all of us.`;
 
                 const line = document.createElement('div');
                 line.className = 'system-msg';
-                line.textContent = (c.desc ? c.desc + ' — ' : '') + 'made by ' + (c.creator || 'someone');
+                line.appendChild(document.createTextNode((c.desc ? c.desc + ' \u2014 ' : '') + 'made by '));
+                line.appendChild(nameLink(c.creator));
                 head.appendChild(line);
 
                 out.innerHTML = '';
