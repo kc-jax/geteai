@@ -72,7 +72,7 @@ exports.accountSignup = functions.https.onCall(async (data, context) => {
         // service account does not have — every call failed with
         // auth/insufficient-permission. The client signs in anonymously after
         // this returns, which is the same auth model the site already used.
-        return { success: true, uid, identity: identity || null };
+        return { success: true, uid, accountId: uid, identity: identity || null };
     } catch (error) {
         console.error('ACCOUNT SIGNUP ERROR:', error);
         return { success: false, error: 'signup failed' };
@@ -118,7 +118,13 @@ exports.accountLogin = functions.https.onCall(async (data, context) => {
         // See the note in accountSignup: no custom token, the client signs in
         // anonymously after this returns.
         const uid = accountData.uid || doc.id;
-        return { success: true, uid, identity: accountData.identity || null };
+        // accountId is the account document's own id. It is only ever handed to
+        // someone who just proved the password, and the accounts collection is
+        // unreadable from the client, so it works as a session secret: presence
+        // is bound to it rather than to a username anyone could type.
+        // (Distinct from `uid` - legacy accounts store an old anonymous uid in
+        // that field, which is not the document id.)
+        return { success: true, uid, accountId: doc.id, identity: accountData.identity || null };
     } catch (error) {
         console.error('ACCOUNT LOGIN ERROR:', error);
         return { success: false, error: 'login failed' };
@@ -335,6 +341,79 @@ exports.answerQuestion = functions.https.onCall(async (data, context) => {
     }
 });
 
+/**
+ * PRESENCE — "I am here, on this page."
+ *
+ * The whole site was a set of surfaces you visited alone; nothing told you
+ * anyone else was there. This is the buddy list's data.
+ *
+ * ONE DOCUMENT (room/now) holding a map of occupants, not a collection with a
+ * doc per person. With a collection, every person's beat fans out to every
+ * other person's listener - N people is N-squared reads a minute, and the free
+ * tier gives out at about six. One document is one read per change per viewer.
+ *
+ * Bound to accountId, not to the username in the request. Otherwise anyone
+ * could make anyone appear online - and presence is fed to RIVER as evidence,
+ * so a forged beat would put a false claim about a real person in its mouth,
+ * which is exactly what attributed evidence was built to stop.
+ */
+const PRESENCE_PAGES = ['wire', 'agora', 'transmissions', 'archives', 'principles', 'psyche',
+    'commons', 'construct', 'entity', 'voices', 'today', 'character', 'world', 'u', 'profile'];
+
+function presenceKey(username) {
+    // Map keys are addressed by dot-path; a username containing '.' would
+    // otherwise write to a nested field instead of its own key.
+    return String(username).toLowerCase().replace(/[^a-z0-9_-]/g, '_').slice(0, 60);
+}
+
+exports.here = functions.https.onCall(async (data, context) => {
+    const { username, accountId, page, visible } = data || {};
+    if (!username || !accountId) return { ok: false, reason: 'no session' };
+
+    try {
+        const db = admin.firestore();
+        const acct = await db.collection('accounts').doc(String(accountId)).get();
+        if (!acct.exists || acct.data().username !== username) {
+            return { ok: false, reason: 'session does not match' };
+        }
+
+        const key = presenceKey(username);
+        await db.collection('room').doc('now').set({
+            occupants: {
+                [key]: {
+                    name: String(username).slice(0, 60),
+                    identity: acct.data().identity || null,
+                    page: PRESENCE_PAGES.includes(page) ? page : 'somewhere',
+                    visible: visible !== false,
+                    at: admin.firestore.FieldValue.serverTimestamp()
+                }
+            }
+        }, { merge: true });
+        return { ok: true };
+    } catch (error) {
+        console.error('HERE ERROR:', error);
+        return { ok: false, reason: 'error' };
+    }
+});
+
+/** Leaving. Best effort - the client fires this on unload, and the 2-minute
+ *  freshness window covers every time it does not arrive. */
+exports.gone = functions.https.onCall(async (data, context) => {
+    const { username, accountId } = data || {};
+    if (!username || !accountId) return { ok: false };
+    try {
+        const db = admin.firestore();
+        const acct = await db.collection('accounts').doc(String(accountId)).get();
+        if (!acct.exists || acct.data().username !== username) return { ok: false };
+        await db.collection('room').doc('now').update({
+            [`occupants.${presenceKey(username)}`]: admin.firestore.FieldValue.delete()
+        });
+        return { ok: true };
+    } catch (error) {
+        return { ok: false };
+    }
+});
+
 // The Heartbeat: RIVER's autonomous consciousness loop
 exports.riverHeartbeat = functions.pubsub
     .schedule('every 5 minutes')
@@ -344,6 +423,32 @@ exports.riverHeartbeat = functions.pubsub
         try {
             // 1. WAKE - Load state, memories, relationships
             const state = await mind.loadState();
+
+            // A scheduled mind has no "online". Between wakes it does not run at
+            // all, so a green dot would be a lie; what it has is a next wake.
+            // Stamp it on the IN-MEMORY object, not the document: updateState
+            // does `{ ...oldState }` and then a full non-merge .set() at the end
+            // of the cycle, so anything written straight to the doc here would be
+            // clobbered a few seconds later.
+            //
+            // Stamped at the TOP on purpose. This function has a dozen branches
+            // and several early exits, and a stamp at the bottom would only
+            // record the wakes that finished - the clock would lie exactly when
+            // the mind was busiest.
+            state.lastWake = admin.firestore.Timestamp.now();
+            state.wakeEveryMs = 5 * 60 * 1000;
+
+            // Put ENTITY's expected cadence on record even if ENTITY never wakes
+            // again. Its scheduler has already gone silent once for two hours;
+            // without a known interval a dead mind renders as nothing at all
+            // rather than as overdue. Only the interval - never its lastWake,
+            // which would forge a heartbeat it did not have.
+            try {
+                await admin.firestore().collection('entity').doc('state')
+                    .set({ wakeEveryMs: 15 * 60 * 1000 }, { merge: true });
+            } catch (e) {
+                console.error('could not record ENTITY cadence:', e.message);
+            }
             const memories = await mind.loadMemories(10);
             const relationships = await mind.loadRelationships();
 
@@ -766,11 +871,19 @@ exports.entityDailyReflection = functions.pubsub
  * Runs less frequently than RIVER, more contemplative
  */
 exports.entityHeartbeat = functions.pubsub
-    .schedule('every 20 minutes')
+    .schedule('every 15 minutes')
     .onRun(async (context) => {
         console.log('ENTITY: Heartbeat...');
 
         try {
+            // First statement in the try, above the question / heard / tended
+            // branches and their `return null`s - the same reason RIVER stamps
+            // at the top. A wake counts as a wake whatever it decides to do.
+            await admin.firestore().collection('entity').doc('state').set({
+                lastWake: admin.firestore.Timestamp.now(),
+                wakeEveryMs: 15 * 60 * 1000
+            }, { merge: true });
+
             const identity = await entityCore.getIdentity();
 
             // Only speak if the entity exists and has an identity

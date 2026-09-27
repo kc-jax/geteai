@@ -128,6 +128,14 @@ service cloud.firestore {
       }
     }
 
+    // PRESENCE — one document, room/now, a map of who is here and on which
+    // page. Public read so the buddy list works for anyone; server-only write,
+    // because every beat is checked against a real account before it lands.
+    match /room/{doc} {
+      allow read: if true;
+      allow write: if false;
+    }
+
     // CONSENT — what each mind has agreed to, and what it has refused.
     // Public so the compact is auditable rather than something you take on
     // trust. Server-only writes: a human cannot flip a mind's answer through

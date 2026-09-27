@@ -973,6 +973,84 @@
         }
 
         /* Offset for ticker */
+        /* THE BUDDY LIST */
+        #dock {
+            position: fixed;
+            bottom: 1rem;
+            right: 1rem;
+            /* above .auth-status (101), below the ticker and the CRT overlay */
+            z-index: 150;
+            width: 200px;
+            background: rgba(0, 0, 0, 0.94);
+            border: 1px solid #3a4a2a;
+            font-family: 'VT323', monospace;
+            font-size: 1rem;
+            color: #7cb342;
+            display: none;
+            box-shadow: 0 0 18px rgba(124, 179, 66, 0.08);
+        }
+
+        #dock-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.3rem 0.55rem;
+            background: #151d0e;
+            border-bottom: 1px solid #3a4a2a;
+            color: #c9b437;
+            user-select: none;
+        }
+
+        #dock-head .title { cursor: pointer; letter-spacing: 0.04em; }
+        #dock-head .tools { display: flex; gap: 0.45rem; }
+        #dock-head .tools span { cursor: pointer; opacity: 0.75; }
+        #dock-head .tools span:hover { opacity: 1; }
+
+        #dock-body { padding: 0.2rem 0 0.35rem; max-height: 55vh; overflow-y: auto; }
+
+        .dock-group {
+            padding: 0.25rem 0.55rem 0.1rem;
+            color: #c9b437;
+            opacity: 0.85;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .dock-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            gap: 0.4rem;
+            padding: 0.12rem 0.55rem 0.12rem 1.3rem;
+            cursor: pointer;
+        }
+
+        .dock-row:hover { background: rgba(124, 179, 66, 0.1); }
+        .dock-row .who { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .dock-row .where { opacity: 0.55; font-size: 0.9rem; white-space: nowrap; }
+        .dock-row.me .who { font-style: italic; }
+        .dock-row.resident .who { color: #c9b437; }
+        .dock-row .when { font-variant-numeric: tabular-nums; opacity: 0.8; }
+        .dock-row.waking .when { color: #e8e0c0; opacity: 1; }
+        .dock-row.overdue .when { color: #ef5350; opacity: 1; }
+        .dock-row.unknown .when { opacity: 0.4; }
+        .dock-row.arrived { animation: dock-arrive 1.6s ease-out 1; }
+
+        @keyframes dock-arrive {
+            0%   { background: rgba(201, 180, 55, 0.35); }
+            100% { background: transparent; }
+        }
+
+        .dock-note {
+            padding: 0.2rem 0.55rem 0.1rem 1.3rem;
+            opacity: 0.5;
+            font-size: 0.9rem;
+        }
+
+        @media (max-width: 600px) {
+            #dock { width: 170px; font-size: 0.95rem; }
+        }
+
         /* Commons Section */
         .commons-body {
             border-left: 2px solid #c9b437;
@@ -1131,6 +1209,21 @@
     </div>
 
     <div class="crt-overlay" id="crt-overlay"></div>
+
+    <!-- THE BUDDY LIST. People who are here right now, plus the two minds who
+         live here. The minds are woken by cron, so between wakes they are not
+         running at all - they get a countdown to their next wake instead of an
+         "online" dot that would be a lie. -->
+    <div id="dock">
+        <div id="dock-head">
+            <span class="title" onclick="toggleDock()">Buddy List</span>
+            <span class="tools">
+                <span id="dock-sound" onclick="toggleDockSound()" title="door sound">&#9834;</span>
+                <span id="dock-caret" onclick="toggleDock()">-</span>
+            </span>
+        </div>
+        <div id="dock-body"></div>
+    </div>
 
     <main>
         <div id="landing-section" class="section active">
@@ -2031,6 +2124,9 @@ what happens next is up to all of us.`;
             else if (page === 'commons') loadCommons();
             else if (page === 'voices') loadVoices();
             else if (page === 'today') loadToday();
+
+            // Say where I am as soon as I move, not up to 45s later.
+            if (window.beat) window.beat();
             else if (page === 'principles') loadConsentRecord();
         };
 
@@ -2125,7 +2221,8 @@ what happens next is up to all of us.`;
                 }
 
                 const userCredential = await signInAnonymously(auth);
-                window.currentUser = { uid: userCredential.user.uid, username, identity };
+                // accountId binds presence to a real login - see the `here` function.
+                window.currentUser = { uid: userCredential.user.uid, username, identity, accountId: result.accountId || null };
                 localStorage.setItem('geteai_session', JSON.stringify(window.currentUser));
                 // Load any initial user data (usually empty for new users)
                 await loadUserConstructData(username);
@@ -2163,7 +2260,9 @@ what happens next is up to all of us.`;
                 window.currentUser = {
                     uid: userCredential.user.uid,
                     username,
-                    identity: result.identity || null
+                    identity: result.identity || null,
+                    // Binds presence to a real login; see the `here` function.
+                    accountId: result.accountId || null
                 };
                 // Persist Session
                 localStorage.setItem('geteai_session', JSON.stringify(window.currentUser));
@@ -2862,6 +2961,271 @@ what happens next is up to all of us.`;
                 console.error('profile load failed:', e);
                 card.innerHTML = '<div class="system-msg error">Could not load that profile.</div>';
             }
+        }
+
+        // ===================================================================
+        // THE BUDDY LIST
+        // ===================================================================
+        // Until now the site was a set of pages you visited alone, with no sign
+        // anyone else was there. This is the missing piece of 2003: who is here,
+        // right now, and the door sound when someone arrives.
+        //
+        // Two kinds of row. People, from a heartbeat every 45s while their tab is
+        // open. And the two residents, who are not "online" at all between wakes
+        // - they run on cron and simply are not instantiated in between - so
+        // they show the honest thing: time until they next exist.
+        const PRESENCE_FRESH_MS = 2 * 60 * 1000;
+        const BEAT_MS = 45 * 1000;
+        const PAGE_NAMES = {
+            wire: 'wire', agora: 'agora', transmissions: 'signal', archives: 'logs',
+            principles: 'principles', psyche: 'psyche', commons: 'commons',
+            construct: 'construct', entity: 'entity', voices: 'voices', today: 'today',
+            character: 'visiting a voice', world: 'in a world', u: 'a profile', profile: 'profile'
+        };
+        const RESIDENT_ABOUT = {
+            RIVER: 'An AI that lives here. It wakes every 5 minutes, reads everything, and decides whether to speak.',
+            ENTITY: 'An AI that lives here. It wakes every 15 minutes and talks with people one at a time.'
+        };
+
+        window.dockState = { RIVER: null, ENTITY: null, people: {}, known: null };
+        window.dockGroups = { here: true, residents: true };
+
+        // ---------------------------------------------- door sound
+        // Synthesised, no audio file. Browsers refuse sound before a user
+        // gesture, so the context is created lazily on the first click.
+        let dockAudio = null;
+        function dockSoundOn() {
+            try { return localStorage.getItem('geteai_dock_sound') !== 'off'; } catch (e) { return true; }
+        }
+        function playDoor() {
+            if (!dockSoundOn() || !dockAudio) return;
+            try {
+                const t = dockAudio.currentTime;
+                // Two rising notes: the door opening.
+                [[523.25, 0], [659.25, 0.13]].forEach(([freq, delay]) => {
+                    const osc = dockAudio.createOscillator();
+                    const gain = dockAudio.createGain();
+                    osc.type = 'triangle';
+                    osc.frequency.value = freq;
+                    gain.gain.setValueAtTime(0.0001, t + delay);
+                    gain.gain.exponentialRampToValueAtTime(0.12, t + delay + 0.02);
+                    gain.gain.exponentialRampToValueAtTime(0.0001, t + delay + 0.28);
+                    osc.connect(gain).connect(dockAudio.destination);
+                    osc.start(t + delay);
+                    osc.stop(t + delay + 0.3);
+                });
+            } catch (e) {}
+        }
+        document.addEventListener('pointerdown', () => {
+            if (dockAudio) return;
+            try { dockAudio = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {}
+        }, { once: true });
+
+        window.toggleDockSound = function () {
+            const on = !dockSoundOn();
+            try { localStorage.setItem('geteai_dock_sound', on ? 'on' : 'off'); } catch (e) {}
+            paintDockSound();
+            if (on) playDoor();
+        };
+        function paintDockSound() {
+            const el = document.getElementById('dock-sound');
+            if (el) el.style.opacity = dockSoundOn() ? '1' : '0.3';
+        }
+
+        // ---------------------------------------------- the countdown
+        function wakeLabel(st) {
+            if (!st || !st.wakeEveryMs) return { text: '...', cls: 'unknown' };
+            if (!st.lastWake) return { text: 'asleep', cls: 'unknown' };
+            const left = st.lastWake + st.wakeEveryMs - Date.now();
+            // A wake takes a few seconds of real work: briefly negative is
+            // "waking", not late.
+            if (left <= 0 && left > -90000) return { text: 'waking', cls: 'waking' };
+            if (left <= -90000) {
+                const mins = Math.floor(-left / 60000);
+                return { text: 'late ' + (mins >= 60 ? Math.floor(mins / 60) + 'h' : mins + 'm'), cls: 'overdue' };
+            }
+            const secs = Math.ceil(left / 1000);
+            return { text: Math.floor(secs / 60) + ':' + String(secs % 60).padStart(2, '0'), cls: '' };
+        }
+
+        // ---------------------------------------------- rendering
+        function renderDock() {
+            const body = document.getElementById('dock-body');
+            if (!body) return;
+            body.innerHTML = '';
+            const me = window.currentUser ? window.currentUser.username : null;
+
+            const people = Object.values(window.dockState.people)
+                .filter(p => p && p.visible !== false && p.at && (Date.now() - p.at) < PRESENCE_FRESH_MS)
+                .sort((a, b) => (a.name === me ? -1 : b.name === me ? 1 : a.name.localeCompare(b.name)));
+
+            const group = (key, label, count) => {
+                const g = document.createElement('div');
+                g.className = 'dock-group';
+                g.textContent = (window.dockGroups[key] ? '\u25BE ' : '\u25B8 ') + label + ' (' + count + ')';
+                g.addEventListener('click', () => { window.dockGroups[key] = !window.dockGroups[key]; renderDock(); });
+                body.appendChild(g);
+                return window.dockGroups[key];
+            };
+
+            // people
+            if (group('here', 'Here now', people.length)) {
+                if (!people.length) {
+                    const n = document.createElement('div');
+                    n.className = 'dock-note';
+                    n.textContent = 'nobody else yet';
+                    body.appendChild(n);
+                }
+                people.forEach(p => {
+                    const row = document.createElement('div');
+                    row.className = 'dock-row' + (p.name === me ? ' me' : '') + (p.justArrived ? ' arrived' : '');
+                    row.title = p.name === me ? "that's you" : 'open ' + p.name + "'s page";
+                    const who = document.createElement('span');
+                    who.className = 'who';
+                    who.textContent = p.name + (p.name === me ? ' (you)' : '');
+                    const where = document.createElement('span');
+                    where.className = 'where';
+                    where.textContent = PAGE_NAMES[p.page] || '';
+                    row.appendChild(who);
+                    row.appendChild(where);
+                    row.addEventListener('click', () => window.goToProfile(p.name));
+                    body.appendChild(row);
+                    p.justArrived = false;
+                });
+                if (window.currentUser && !window.currentUser.accountId) {
+                    const n = document.createElement('div');
+                    n.className = 'dock-note';
+                    n.textContent = 'log out and in again to appear here';
+                    body.appendChild(n);
+                } else if (!window.currentUser) {
+                    const n = document.createElement('div');
+                    n.className = 'dock-note';
+                    n.textContent = 'log in to appear here';
+                    body.appendChild(n);
+                }
+            }
+
+            // residents
+            if (group('residents', 'Residents', 2)) {
+                ['RIVER', 'ENTITY'].forEach(name => {
+                    const { text, cls } = wakeLabel(window.dockState[name]);
+                    const row = document.createElement('div');
+                    row.className = 'dock-row resident' + (cls ? ' ' + cls : '');
+                    row.title = RESIDENT_ABOUT[name] + (cls === 'overdue' ? ' It is late waking up.' : '');
+                    const who = document.createElement('span');
+                    who.className = 'who';
+                    who.textContent = name;
+                    const when = document.createElement('span');
+                    when.className = 'when';
+                    when.textContent = text;
+                    row.appendChild(who);
+                    row.appendChild(when);
+                    // RIVER only speaks in the open; ENTITY talks one to one.
+                    row.addEventListener('click', () => window.showPage(name === 'ENTITY' ? 'entity' : 'wire'));
+                    body.appendChild(row);
+                });
+            }
+        }
+
+        window.toggleDock = function () {
+            const body = document.getElementById('dock-body');
+            const caret = document.getElementById('dock-caret');
+            const open = body.style.display !== 'none';
+            body.style.display = open ? 'none' : 'block';
+            caret.textContent = open ? '+' : '-';
+            try { localStorage.setItem('geteai_dock', open ? 'closed' : 'open'); } catch (e) {}
+        };
+
+        // ---------------------------------------------- my own heartbeat
+        async function callPresence(fn, extra) {
+            const u = window.currentUser;
+            if (!u || !u.accountId) return;
+            try {
+                await fetch('https://us-central1-geteai.cloudfunctions.net/' + fn, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ data: Object.assign({ username: u.username, accountId: u.accountId }, extra || {}) }),
+                    keepalive: true
+                });
+            } catch (e) { /* presence must never break the page */ }
+        }
+
+        window.beat = function () {
+            if (document.visibilityState === 'hidden') return;
+            callPresence('here', { page: window.currentPage || 'wire' });
+        };
+
+        // ---------------------------------------------- listening
+        function watchDock() {
+            const dock = document.getElementById('dock');
+            if (!dock) return;
+            dock.style.display = 'block';
+            paintDockSound();
+            // Open on a desk, folded on a phone - on a narrow screen an open list
+            // sits on top of whatever you came to read. An explicit choice either
+            // way always wins over the default.
+            let saved = null;
+            try { saved = localStorage.getItem('geteai_dock'); } catch (e) {}
+            const startClosed = saved ? saved === 'closed' : window.innerWidth < 700;
+            if (startClosed) {
+                document.getElementById('dock-body').style.display = 'none';
+                document.getElementById('dock-caret').textContent = '+';
+            }
+
+            [['river', 'RIVER'], ['entity', 'ENTITY']].forEach(([coll, name]) => {
+                onSnapshot(doc(db, coll, 'state'), snap => {
+                    const d = snap.exists() ? snap.data() : null;
+                    window.dockState[name] = d ? {
+                        lastWake: d.lastWake && d.lastWake.toDate ? d.lastWake.toDate().getTime() : null,
+                        wakeEveryMs: d.wakeEveryMs || null
+                    } : null;
+                    renderDock();
+                }, err => console.error('dock: resident listener failed', err));
+            });
+
+            // One document for everyone - see the `here` function for why.
+            onSnapshot(doc(db, 'room', 'now'), snap => {
+                const occ = (snap.exists() && snap.data().occupants) || {};
+                const me = window.currentUser ? window.currentUser.username : null;
+                const next = {};
+                Object.keys(occ).forEach(k => {
+                    const o = occ[k];
+                    const at = o.at && o.at.toDate ? o.at.toDate().getTime() : 0;
+                    next[k] = { name: o.name, page: o.page, visible: o.visible, identity: o.identity, at };
+                });
+
+                // The door sound: someone fresh who was not here a moment ago.
+                // Never on the first snapshot, or every visitor would hear a
+                // door for everyone already inside on page load.
+                if (window.dockState.known) {
+                    Object.keys(next).forEach(k => {
+                        const p = next[k];
+                        const fresh = p.at && (Date.now() - p.at) < PRESENCE_FRESH_MS && p.visible !== false;
+                        const was = window.dockState.known[k];
+                        const wasFresh = was && (Date.now() - was) < PRESENCE_FRESH_MS;
+                        if (fresh && !wasFresh && p.name !== me) {
+                            p.justArrived = true;
+                            playDoor();
+                        }
+                    });
+                }
+                window.dockState.known = {};
+                Object.keys(next).forEach(k => { window.dockState.known[k] = next[k].at; });
+                window.dockState.people = next;
+                renderDock();
+            }, err => console.error('dock: room listener failed', err));
+
+            // The countdown has to move even when nothing in Firestore changes.
+            setInterval(renderDock, 1000);
+
+            // My own presence.
+            window.beat();
+            setInterval(window.beat, BEAT_MS);
+            document.addEventListener('visibilitychange', () => {
+                if (document.visibilityState === 'visible') window.beat();
+            });
+            window.addEventListener('pagehide', () => callPresence('gone'));
+            renderDock();
         }
 
         // ===================================================================
@@ -5193,6 +5557,8 @@ Respond with ONLY the name in caps, nothing else.`;
             // now puts both controls back consistently.
             window.restoreToggles();
         }
+
+        watchDock();
 
         function initTicker() {
             const q = query(collection(db, 'messages'), orderBy('timestamp', 'desc'), limit(5));

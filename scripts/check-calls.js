@@ -38,7 +38,11 @@ const BUILTIN = new Set([
     'alert', 'confirm', 'parseInt', 'parseFloat', 'String', 'Number', 'Boolean',
     'Array', 'Object', 'JSON', 'Math', 'Date', 'Promise', 'fetch', 'setTimeout',
     'setInterval', 'clearTimeout', 'clearInterval', 'require', 'import', 'console',
-    'open', 'close', 'print', 'scrollTo'
+    'open', 'close', 'print', 'scrollTo',
+    // window's own DOM methods - builtins, not page functions
+    'addEventListener', 'removeEventListener', 'dispatchEvent',
+    'requestAnimationFrame', 'cancelAnimationFrame', 'getComputedStyle',
+    'matchMedia', 'getSelection', 'postMessage', 'queueMicrotask'
 ]);
 
 const problems = [];

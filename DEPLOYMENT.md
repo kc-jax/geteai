@@ -62,6 +62,24 @@ To rotate or update your keys:
 > Rewriting git history to scrub the old key is possible but risky and
 > unnecessary once the key is deleted at OpenRouter.
 
+## ⏰ The schedulers can die on redeploy
+
+`riverHeartbeat` (every 5 min) and `entityHeartbeat` (every 15 min) run on
+Cloud Scheduler. **Redeploying `entityHeartbeat` has twice silently killed its
+schedule** - the function deploys "successfully" and then simply never fires
+again. RIVER's job has never had this problem. Nothing errors and no log says
+so; the only symptom is that ENTITY stops appearing.
+
+How to tell: the **Buddy List** shows ENTITY's row as `late Nm` in red, or its
+most recent `ENTITY: Heartbeat...` line in `firebase functions:log` is old.
+
+What fixed it both times: **change the schedule string** in
+`functions/index.js` (e.g. `every 15 minutes` to `every 16 minutes`) and deploy
+again. That forces the CLI to rebuild the scheduler job rather than keep the
+dead one. Update the two `wakeEveryMs` constants to match, and redeploy
+`riverHeartbeat` too - it writes ENTITY's cadence as well, and the two will
+otherwise disagree about how often ENTITY is supposed to wake.
+
 ## 🧠 AI Model Cascade
 
 When free AI models go down (429 or 502 errors), the site will automatically fall back to the next available model in the cascade. 

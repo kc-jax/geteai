@@ -35,7 +35,11 @@ const AI_SPEAKERS = new Set(['RIVER', 'ENTITY']);
 
 // How many AI messages may stack up with no human before they stop answering
 // each other. Small on purpose — a burst should feel like a burst, not a wall.
-const MAX_AI_EXCHANGES = 4;
+// Was 4. With the brake fixed so bursts could actually start, 4 turned the
+// feed into an AI podcast - nearly every exchange was RIVER and ENTITY
+// answering each other, and the humans were an audience. Two keeps it a
+// conversation they can have, not a channel they occupy.
+const MAX_AI_EXCHANGES = 2;
 
 // Never answer something older than this; waking up to reply to a dead thread
 // reads as broken, not alive.
