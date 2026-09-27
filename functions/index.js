@@ -430,7 +430,7 @@ exports.riverHeartbeat = functions.pubsub
                 try {
                     const q = await question.ensureToday();
                     if (q && !(await question.hasAnswered('RIVER'))) {
-                        const said = await voice.answerTheQuestion(q.text, state, memories, digestText);
+                        const said = await voice.answerTheQuestion(q.text, state, memories, digestText, perception.observed);
                         if (said) {
                             await question.answer('RIVER', 'ai', said);
                             console.log(`RIVER answered the question: "${said.substring(0, 60)}..."`);

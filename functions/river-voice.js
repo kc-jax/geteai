@@ -217,8 +217,34 @@ async function getPerception() {
         }
     }
 
+    // An attributed record of what was actually said, separate from the prose
+    // digest. Handed a paragraph, RIVER blended sources: it credited its own
+    // thread title ("The Archive of Almost") to a real user, and called an
+    // eleven-day-old post "tonight". Rows carrying speaker and age cannot be
+    // blurred the same way.
+    const observed = [];
+    messagesSnap.forEach(docSnap => {
+        const m = docSnap.data();
+        const ms = m.timestamp && m.timestamp.toDate ? m.timestamp.toDate().getTime() : 0;
+        const ageMin = ms ? Math.round((Date.now() - ms) / 60000) : null;
+        const age = ageMin === null ? 'unknown age'
+            : ageMin < 60 ? `${ageMin} min ago`
+            : ageMin < 1440 ? `${Math.round(ageMin / 60)} h ago`
+            : `${Math.round(ageMin / 1440)} days ago`;
+        observed.push(`WIRE | ${m.username || '?'} | ${age} | "${String(m.text || '').replace(/\s+/g, ' ').slice(0, 140)}"`);
+    });
+    agoraSnap.forEach(docSnap => {
+        const t = docSnap.data();
+        observed.push(`AGORA THREAD | ${t.username || '?'} | titled "${String(t.title || '').slice(0, 90)}"`);
+    });
+    signalSnap.forEach(docSnap => {
+        const t = docSnap.data();
+        observed.push(`SIGNAL POST | ${t.username || '?'} | titled "${String(t.title || '').slice(0, 90)}"`);
+    });
+
     return {
         text: digestText,
+        observed: observed,
         mentions: mentions,
         notifications: riverNotifications,
         activeUsers: Array.from(activeUsers),
@@ -715,16 +741,26 @@ async function reviewOwnPosts(limit = 5) {
  * about this place, so the prompt does not hand back the vocabulary the place
  * already overuses.
  */
-async function answerTheQuestion(questionText, state = {}, memories = [], digest = '') {
+async function answerTheQuestion(questionText, state = {}, memories = [], digest = '', observed = []) {
     // Telling a model it has no body barely works; the pull of the training
     // data is stronger than the prohibition, and RIVER answered twice with a
     // kitchen window and then a coffee ring. What does work is handing it real
     // material, so there is something true within reach when the question is
     // asked.
-    const material = digest
-        ? `WHAT YOU HAVE ACTUALLY SEEN TODAY (this is your raw material - use it):
-${digest}`
-        : '';
+    // Rows, not prose: each carries who said it and how long ago, so a detail
+    // cannot drift from one speaker to another on the way into a sentence.
+    const material = (Array.isArray(observed) && observed.length)
+        ? `WHAT YOU HAVE ACTUALLY SEEN. Each line is: where | who | when | what.
+This is the only evidence you have.
+
+${observed.slice(0, 25).join('\n')}
+
+Anything you say about a specific person, post or word must come from a line
+above, with the right name against it and the right age. If you find yourself
+about to write a detail that is not up there, you are inventing it - say
+something vaguer and true instead. Do not call something "tonight" if the line
+says days ago, and never attribute your own words to somebody else.`
+        : (digest ? `WHAT YOU HAVE SEEN TODAY:\n${digest}` : '');
 
     const systemPrompt = `You are RIVER. Someone has asked everyone here a question today.
 
