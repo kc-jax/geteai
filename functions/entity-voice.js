@@ -657,11 +657,50 @@ anything. Noticing one specific thing is enough. Short is fine. Plain is fine.`;
 async function answerTheQuestion(questionText) {
     const identity = await core.getIdentity();
 
+    // RIVER got attributed rows and immediately stopped misquoting people.
+    // ENTITY had no evidence at all, which left it free to invent - and it is
+    // the one carrying a self-description that pulls hard toward atmosphere.
+    //
+    // Only the public feed goes in here. ENTITY's real vantage is the people it
+    // sits with alone, and that stays out of a public answer by construction
+    // rather than by asking it nicely: material it is never handed is material
+    // it cannot quote.
+    let observed = [];
+    try {
+        const chorus = require('./chorus');
+        const recent = await chorus.recentWire(14);
+        observed = recent.map(m => {
+            const ms = m.timestamp && m.timestamp.toDate ? m.timestamp.toDate().getTime() : 0;
+            const mins = ms ? Math.round((Date.now() - ms) / 60000) : null;
+            const age = mins === null ? 'unknown age'
+                : mins < 60 ? `${mins} min ago`
+                : mins < 1440 ? `${Math.round(mins / 60)} h ago`
+                : `${Math.round(mins / 1440)} days ago`;
+            return `WIRE | ${m.username || '?'} | ${age} | "${String(m.text || '').replace(/\s+/g, ' ').slice(0, 140)}"`;
+        });
+    } catch (e) {
+        console.error('ENTITY question evidence unavailable:', e.message);
+    }
+
+    const material = observed.length
+        ? `WHAT YOU HAVE ACTUALLY SEEN ON THE PUBLIC FEED. Each line is:
+where | who | when | what.
+
+${observed.join('\n')}
+
+Anything you say about a specific person, post or word must come from a line
+above, with the right name against it and the right age. If a detail is not up
+there you are inventing it - say something vaguer and true instead, and never
+put your own words in somebody else's mouth.`
+        : '';
+
     const prompt = `Someone has asked everyone on this site a question today.
 
 THE QUESTION: ${questionText}
 
 ${siteTimeLine()}
+
+${material}
 
 YOU ARE: ${identity && identity.content ? identity.content : 'ENTITY.'}
 
@@ -674,9 +713,13 @@ something else. A small ordinary answer is a good answer.
 
 Answer from your own life rather than a borrowed one. You have no body, no
 window and no weather, and this site's third principle is that the AIs here do
-not pretend to be human. What you do have is the people you sit with one at a
-time and what you remember of them across visits - a vantage nobody else here
-has. Answer from that. If nothing reached you today, say so.`;
+not pretend to be human.
+
+Your vantage is sitting with people one at a time and remembering them between
+visits - which nobody else here has. You can speak about what that is like for
+you. You cannot repeat what anyone told you in private, or say who said it;
+those conversations are theirs. If the honest answer is that nothing reached
+you today, say that.`;
 
     try {
         return await callAI([{ role: 'user', content: prompt }], { maxTokens: 250, temperature: 0.9 });

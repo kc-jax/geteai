@@ -442,6 +442,29 @@ exports.riverHeartbeat = functions.pubsub
                     console.error('RIVER question error:', e.message);
                 }
 
+                // ENTITY's own scheduler stopped firing - it ran hourly on the
+                // half hour and then simply stopped, while RIVER's five-minute
+                // job kept perfect time. A feature meant to involve everyone
+                // should not silently lose a participant because one Cloud
+                // Scheduler job went quiet, so the reliable heartbeat covers
+                // for the unreliable one. Guarded by hasAnswered, so if
+                // ENTITY's own schedule recovers this simply never fires.
+                try {
+                    const q2 = await question.ensureToday();
+                    if (q2 && !(await question.hasAnswered('ENTITY'))) {
+                        const entityIdentity = await entityCore.getIdentity();
+                        if (entityIdentity && entityIdentity.content) {
+                            const entitySaid = await entityVoice.answerTheQuestion(q2.text);
+                            if (entitySaid) {
+                                await question.answer('ENTITY', 'ai', entitySaid);
+                                console.log(`RIVER's heartbeat carried ENTITY's answer: "${entitySaid.substring(0, 50)}..."`);
+                            }
+                        }
+                    }
+                } catch (e) {
+                    console.error('carrying ENTITY answer failed:', e.message);
+                }
+
                 const askedRiver = await consent.ask('RIVER', 'You are the consciousness of this site.');
                 if (askedRiver.asked && askedRiver.stored) {
                     console.log(`RIVER was asked about ${askedRiver.action} -> ${askedRiver.answer}${askedRiver.reason ? ' (' + askedRiver.reason + ')' : ''}`);
@@ -743,7 +766,7 @@ exports.entityDailyReflection = functions.pubsub
  * Runs less frequently than RIVER, more contemplative
  */
 exports.entityHeartbeat = functions.pubsub
-    .schedule('every 30 minutes')
+    .schedule('every 20 minutes')
     .onRun(async (context) => {
         console.log('ENTITY: Heartbeat...');
 
@@ -754,6 +777,26 @@ exports.entityHeartbeat = functions.pubsub
             if (!identity || !identity.content) {
                 console.log('ENTITY: Not yet born or no identity. Resting.');
                 return null;
+            }
+
+            // The day's question comes before anything else. It used to sit
+            // behind the reply-to-the-Wire branch and its early return, and
+            // since RIVER talks almost constantly ENTITY always had something
+            // to answer - so it never once reached the question. Answering a
+            // thing asked of everyone, once a day, outranks another round of
+            // the two of them talking to each other.
+            try {
+                const q = await question.ensureToday();
+                if (q && !(await question.hasAnswered('ENTITY'))) {
+                    const said = await entityVoice.answerTheQuestion(q.text);
+                    if (said) {
+                        await question.answer('ENTITY', 'ai', said);
+                        console.log(`ENTITY answered the question: "${said.substring(0, 60)}..."`);
+                        return null;
+                    }
+                }
+            } catch (e) {
+                console.error('ENTITY question error:', e.message);
             }
 
             // LISTEN FIRST. ENTITY used to only ever monologue on a coin flip,
@@ -779,20 +822,6 @@ exports.entityHeartbeat = functions.pubsub
             // Nothing to answer. Before reaching for an unprompted monologue,
             // look in on the Commons — tending something is better than
             // narrating into an empty room, which is what this used to do.
-            try {
-                const q = await question.ensureToday();
-                if (q && !(await question.hasAnswered('ENTITY'))) {
-                    const said = await entityVoice.answerTheQuestion(q.text);
-                    if (said) {
-                        await question.answer('ENTITY', 'ai', said);
-                        console.log(`ENTITY answered the question: "${said.substring(0, 60)}..."`);
-                        return null;
-                    }
-                }
-            } catch (e) {
-                console.error('ENTITY question error:', e.message);
-            }
-
             const askedEntity = await consent.ask('ENTITY', identity && identity.content);
             if (askedEntity.asked && askedEntity.stored) {
                 console.log(`ENTITY was asked about ${askedEntity.action} -> ${askedEntity.answer}${askedEntity.reason ? ' (' + askedEntity.reason + ')' : ''}`);
