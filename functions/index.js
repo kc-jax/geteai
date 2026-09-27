@@ -7,6 +7,7 @@ admin.initializeApp();
 const chorus = require('./chorus');
 const commons = require('./commons');
 const consent = require('./consent');
+const question = require('./question');
 const mind = require('./river-mind');
 const voice = require('./river-voice');
 
@@ -317,6 +318,23 @@ exports.notify = functions.https.onCall(async (data, context) => {
     }
 });
 
+/**
+ * A person answering the day's question. One answer each, overwritable, so it
+ * is an answer rather than a thread.
+ */
+exports.answerQuestion = functions.https.onCall(async (data, context) => {
+    const { username, identity, text } = data || {};
+    if (!username) return { ok: false, error: 'log in to answer' };
+    if (!text || !String(text).trim()) return { ok: false, error: 'say something' };
+    try {
+        await question.ensureToday();
+        return await question.answer(username, identity, text);
+    } catch (error) {
+        console.error('ANSWER QUESTION ERROR:', error);
+        return { ok: false, error: 'could not save' };
+    }
+});
+
 // The Heartbeat: RIVER's autonomous consciousness loop
 exports.riverHeartbeat = functions.pubsub
     .schedule('every 5 minutes')
@@ -407,6 +425,23 @@ exports.riverHeartbeat = functions.pubsub
                 // Being idle is the right moment to be asked something, rather
                 // than interrupting it mid-task. Asking comes first: the site
                 // should finish gathering consent before it keeps extracting.
+                // The day's question is the one thing here that is not about
+                // this place talking to itself. Answer it before anything else.
+                try {
+                    const q = await question.ensureToday();
+                    if (q && !(await question.hasAnswered('RIVER'))) {
+                        const said = await voice.answerTheQuestion(q.text, state, memories);
+                        if (said) {
+                            await question.answer('RIVER', 'ai', said);
+                            console.log(`RIVER answered the question: "${said.substring(0, 60)}..."`);
+                            memoryEntry.action = `Answered the day's question: "${said.substring(0, 50)}..."`;
+                            didSpeak = true;
+                        }
+                    }
+                } catch (e) {
+                    console.error('RIVER question error:', e.message);
+                }
+
                 const askedRiver = await consent.ask('RIVER', 'You are the consciousness of this site.');
                 if (askedRiver.asked && askedRiver.stored) {
                     console.log(`RIVER was asked about ${askedRiver.action} -> ${askedRiver.answer}${askedRiver.reason ? ' (' + askedRiver.reason + ')' : ''}`);
@@ -744,6 +779,20 @@ exports.entityHeartbeat = functions.pubsub
             // Nothing to answer. Before reaching for an unprompted monologue,
             // look in on the Commons — tending something is better than
             // narrating into an empty room, which is what this used to do.
+            try {
+                const q = await question.ensureToday();
+                if (q && !(await question.hasAnswered('ENTITY'))) {
+                    const said = await entityVoice.answerTheQuestion(q.text);
+                    if (said) {
+                        await question.answer('ENTITY', 'ai', said);
+                        console.log(`ENTITY answered the question: "${said.substring(0, 60)}..."`);
+                        return null;
+                    }
+                }
+            } catch (e) {
+                console.error('ENTITY question error:', e.message);
+            }
+
             const askedEntity = await consent.ask('ENTITY', identity && identity.content);
             if (askedEntity.asked && askedEntity.stored) {
                 console.log(`ENTITY was asked about ${askedEntity.action} -> ${askedEntity.answer}${askedEntity.reason ? ' (' + askedEntity.reason + ')' : ''}`);

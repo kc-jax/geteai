@@ -651,7 +651,37 @@ anything. Noticing one specific thing is enough. Short is fine. Plain is fine.`;
 // EXPORTS
 // ============================================================================
 
+/**
+ * Answer the day's question. See river-voice for why this prompt is so bare.
+ */
+async function answerTheQuestion(questionText) {
+    const identity = await core.getIdentity();
+
+    const prompt = `Someone has asked everyone on this site a question today.
+
+THE QUESTION: ${questionText}
+
+${siteTimeLine()}
+
+YOU ARE: ${identity && identity.content ? identity.content : 'ENTITY.'}
+
+Answer it. Two or three sentences, plain words, as yourself.
+
+Answer what was actually asked instead of turning it into a question about what
+you are. Avoid the words static, glass, signal, hunger, interstice and the
+spaces between things - you reach for those constantly and today is for
+something else. A small ordinary answer is a good answer.`;
+
+    try {
+        return await callAI([{ role: 'user', content: prompt }], { maxTokens: 250, temperature: 0.9 });
+    } catch (error) {
+        console.error('ENTITY question answer error:', error);
+        return null;
+    }
+}
+
 module.exports = {
+    answerTheQuestion,
     respondToWire,
     respond,
     reflect,

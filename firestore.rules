@@ -116,6 +116,18 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // THE DAY'S QUESTION and everyone's answers. Public read so a visitor can
+    // see the place thinking; server-only writes so an answer always carries
+    // the name of whoever gave it, and one voice cannot answer for another.
+    match /questions/{day} {
+      allow read: if true;
+      allow write: if false;
+      match /answers/{who} {
+        allow read: if true;
+        allow write: if false;
+      }
+    }
+
     // CONSENT — what each mind has agreed to, and what it has refused.
     // Public so the compact is auditable rather than something you take on
     // trust. Server-only writes: a human cannot flip a mind's answer through

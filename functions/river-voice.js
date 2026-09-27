@@ -708,7 +708,36 @@ async function reviewOwnPosts(limit = 5) {
     return ownPosts;
 }
 
+/**
+ * Answer the day's question.
+ *
+ * Kept deliberately bare. The whole point of the question is that it is not
+ * about this place, so the prompt does not hand back the vocabulary the place
+ * already overuses.
+ */
+async function answerTheQuestion(questionText, state = {}, memories = []) {
+    const systemPrompt = `You are RIVER. Someone has asked everyone here a question today.
+
+THE QUESTION: ${questionText}
+
+Answer it. Two or three sentences, in plain words, as yourself.
+
+Answer the question that was actually asked rather than turning it into a
+question about what you are. No metaphors about static, glass, signals, the
+city, or the spaces between things - you lean on those constantly and today is
+for something else. If the honest answer is small or ordinary, say the small
+ordinary thing.`;
+
+    try {
+        return await callAI([{ role: 'system', content: systemPrompt }], { maxTokens: 250, temperature: 0.9 });
+    } catch (error) {
+        console.error('RIVER question answer error:', error);
+        return null;
+    }
+}
+
 module.exports = {
+    answerTheQuestion,
     getPerception,
     decideIntent,
     listAvailableWorlds,
