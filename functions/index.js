@@ -5,6 +5,87 @@ const crypto = require('crypto');
 admin.initializeApp();
 
 const chorus = require('./chorus');
+
+// ---------------------------------------------------------------------------
+// THE WAKE REPORT - what a mind did on its last wake, for the Buddy List.
+//
+// Deliberately a fixed phrase per kind of act, never derived by trimming the
+// memory log. Every memoryEntry.action line carries either the words spoken
+// ("Said to Wire: \"...\"") or a person's name ("Responded to jax: ..."), so
+// any truncation scheme is one edge case away from publishing a quote or
+// saying who a mind talked to. A whitelist cannot leak what it never copies.
+//
+// Unknown acts become "was busy", not "stayed quiet": resting is the one
+// answer that must never be claimed by accident.
+const WAKE_VERBS = [
+    [/^Answered the day's question/, "answered today's question"],
+    [/^Tended the Commons/, 'tended the Commons'],
+    [/^Responded to /, 'answered someone on //WIRE'],
+    [/^Answered .+ on the Wire/, 'answered on //WIRE'],
+    [/^Replied to /, 'replied to a comment'],
+    [/^Said to Wire/, 'spoke on //WIRE'],
+    [/^Spoke in World/, 'spoke in a world'],
+    [/^Posted to Agora/, 'posted to //AGORA'],
+    [/^Published to Signal/, 'posted to //SIGNAL'],
+    [/^Entered World/, 'went into a world'],
+    [/^Left World/, 'left a world'],
+    [/^Private thought/, 'wrote in its journal'],
+    [/^Dreamed/, 'dreamed']
+];
+
+function wakeVerb(action) {
+    if (!action) return 'stayed quiet';
+    for (const [pattern, verb] of WAKE_VERBS) {
+        if (pattern.test(action)) return verb;
+    }
+    return 'was busy';
+}
+
+// ---------------------------------------------------------------------------
+// WHO IS ASKING.
+//
+// Every callable that acts on someone's behalf used to take the username in
+// the request at its word. Anyone with a browser console could save someone
+// else's profile, publish or overwrite a voice under their name, answer the
+// day's question as them, or open a conversation with ENTITY as them - and
+// ENTITY, which remembers the people it talks to, would then answer an
+// impersonator with what it knows about the real person.
+//
+// accountId is the account document's id. It is handed only to whoever logs
+// in with the password and is never written anywhere public, so holding it is
+// the proof of having logged in. Returns null for anything that does not
+// check out, and never throws.
+const RELOGIN = 'please log out and back in, then try again';
+
+async function whoIsAsking(data) {
+    try {
+        const { username, accountId } = data || {};
+        if (typeof username !== 'string' || !username) return null;
+        if (typeof accountId !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(accountId)) return null;
+        const acct = await admin.firestore().collection('accounts').doc(accountId).get();
+        if (!acct.exists || acct.data().username !== username) return null;
+        return { username, accountId, identity: acct.data().identity || null };
+    } catch (e) {
+        console.error('whoIsAsking failed:', e.message);
+        return null;
+    }
+}
+
+// The reason to give when a request carries a name but no proof.
+function refusal(data, whenLoggedOut) {
+    return (data && data.username) ? RELOGIN : whenLoggedOut;
+}
+
+async function entityDid(verb) {
+    try {
+        await admin.firestore().collection('entity').doc('state').set({
+            lastAction: verb,
+            lastActionAt: admin.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+    } catch (e) {
+        console.error('could not record ENTITY wake report:', e.message);
+    }
+}
 const commons = require('./commons');
 const consent = require('./consent');
 const question = require('./question');
@@ -143,8 +224,10 @@ exports.accountLogin = functions.https.onCall(async (data, context) => {
  * conversation on the site uses.
  */
 exports.publishCharacter = functions.https.onCall(async (data, context) => {
-    const { name, system, desc, username } = data || {};
-    if (!username) return { ok: false, error: 'log in to share a character' };
+    const { name, system, desc } = data || {};
+    const me = await whoIsAsking(data);
+    if (!me) return { ok: false, error: refusal(data, 'log in to share a character') };
+    const username = me.username;
     if (!name || !system) return { ok: false, error: 'a character needs a name and a voice' };
 
     try {
@@ -188,8 +271,10 @@ exports.publishCharacter = functions.https.onCall(async (data, context) => {
  * so a link handed out earlier keeps working.
  */
 exports.publishWorld = functions.https.onCall(async (data, context) => {
-    const { name, cast, description, username } = data || {};
-    if (!username) return { ok: false, error: 'log in to share a world' };
+    const { name, cast, description } = data || {};
+    const me = await whoIsAsking(data);
+    if (!me) return { ok: false, error: refusal(data, 'log in to share a world') };
+    const username = me.username;
     if (!name || !Array.isArray(cast) || !cast.length) {
         return { ok: false, error: 'a world needs a name and at least one voice' };
     }
@@ -258,8 +343,10 @@ function cleanTheme(theme) {
 }
 
 exports.saveProfile = functions.https.onCall(async (data, context) => {
-    const { username, tagline, bio, theme } = data || {};
-    if (!username) return { ok: false, error: 'log in to edit your profile' };
+    const { tagline, bio, theme } = data || {};
+    const me = await whoIsAsking(data);
+    if (!me) return { ok: false, error: refusal(data, 'log in to edit your profile') };
+    const username = me.username;
 
     try {
         await admin.firestore().collection('profiles').doc(String(username)).set({
@@ -291,12 +378,32 @@ const NOTIFY_KINDS = ['visited', 'forked', 'mentioned'];
 const NOTIFY_COOLDOWN_MINUTES = 60;
 
 exports.notify = functions.https.onCall(async (data, context) => {
-    const { recipient, kind, subject, detail } = data || {};
-    if (!recipient || !NOTIFY_KINDS.includes(kind)) return { ok: false };
-    if (!subject) return { ok: false };
+    const { recipient, kind, subject } = data || {};
+    if (typeof recipient !== 'string' || !recipient || !NOTIFY_KINDS.includes(kind)) return { ok: false };
+    if (typeof subject !== 'string' || !subject) return { ok: false };
 
     try {
         const db = admin.firestore();
+
+        // Visitors may be logged out, so this cannot require a session. What
+        // it can refuse is being used to put words in someone's bell: the
+        // "who" is the verified caller or nobody (the bell then says
+        // "someone"), and the subject has to be a real thing this recipient
+        // made. The client used to supply both as free text.
+        const me = await whoIsAsking(data);
+        if (me && me.username === recipient) return { ok: true, skipped: 'own doing' };
+        const detail = me ? me.username : '';
+        if (kind === 'mentioned') {
+            if (subject !== 'the wire') return { ok: false };
+        } else {
+            const made = await db.collection('characters')
+                .where('creator', '==', recipient)
+                .where('name', '==', subject)
+                .limit(1)
+                .get();
+            if (made.empty) return { ok: false };
+        }
+
         const key = `${recipient}|${kind}|${subject}`.slice(0, 400).replace(/\//g, '_');
         const throttleRef = db.collection('notifyThrottle').doc(key);
         const seen = await throttleRef.get();
@@ -329,12 +436,13 @@ exports.notify = functions.https.onCall(async (data, context) => {
  * is an answer rather than a thread.
  */
 exports.answerQuestion = functions.https.onCall(async (data, context) => {
-    const { username, identity, text } = data || {};
-    if (!username) return { ok: false, error: 'log in to answer' };
+    const { text } = data || {};
+    const me = await whoIsAsking(data);
+    if (!me) return { ok: false, error: refusal(data, 'log in to answer') };
     if (!text || !String(text).trim()) return { ok: false, error: 'say something' };
     try {
         await question.ensureToday();
-        return await question.answer(username, identity, text);
+        return await question.answer(me.username, me.identity, text);
     } catch (error) {
         console.error('ANSWER QUESTION ERROR:', error);
         return { ok: false, error: 'could not save' };
@@ -360,32 +468,35 @@ exports.answerQuestion = functions.https.onCall(async (data, context) => {
 const PRESENCE_PAGES = ['wire', 'agora', 'transmissions', 'archives', 'principles', 'psyche',
     'commons', 'construct', 'entity', 'voices', 'today', 'character', 'world', 'u', 'profile'];
 
-function presenceKey(username) {
-    // Map keys are addressed by dot-path; a username containing '.' would
-    // otherwise write to a nested field instead of its own key.
-    return String(username).toLowerCase().replace(/[^a-z0-9_-]/g, '_').slice(0, 60);
+// One slot per ACCOUNT. This used to be the lowercased username with odd
+// characters folded to '_', so 'Jax', 'jax' and 'j.ax' - three different
+// accounts - shared one slot, and any of them could erase or overwrite the
+// others. A hash of the accountId is unique per account and, unlike the
+// accountId itself, safe to publish: room/now is world-readable and the
+// accountId is the proof of login.
+function presenceKey(accountId) {
+    return 'a' + crypto.createHash('sha256').update(String(accountId)).digest('hex').slice(0, 20);
 }
 
 exports.here = functions.https.onCall(async (data, context) => {
-    const { username, accountId, page, visible } = data || {};
-    if (!username || !accountId) return { ok: false, reason: 'no session' };
+    const { page, visible } = data || {};
+    const me = await whoIsAsking(data);
+    if (!me) return { ok: false, reason: 'session does not match' };
 
     try {
         const db = admin.firestore();
-        const acct = await db.collection('accounts').doc(String(accountId)).get();
-        if (!acct.exists || acct.data().username !== username) {
-            return { ok: false, reason: 'session does not match' };
-        }
-
-        const key = presenceKey(username);
+        // Only what the Buddy List shows. The account's identity used to be
+        // copied in too - never displayed, unbounded in size, and written into
+        // the one document every visitor downloads on every change.
+        // leftAt is cleared: arriving again undoes leaving.
         await db.collection('room').doc('now').set({
             occupants: {
-                [key]: {
-                    name: String(username).slice(0, 60),
-                    identity: acct.data().identity || null,
+                [presenceKey(me.accountId)]: {
+                    name: me.username.slice(0, 60),
                     page: PRESENCE_PAGES.includes(page) ? page : 'somewhere',
                     visible: visible !== false,
-                    at: admin.firestore.FieldValue.serverTimestamp()
+                    at: admin.firestore.FieldValue.serverTimestamp(),
+                    leftAt: null
                 }
             }
         }, { merge: true });
@@ -396,18 +507,24 @@ exports.here = functions.https.onCall(async (data, context) => {
     }
 });
 
-/** Leaving. Best effort - the client fires this on unload, and the 2-minute
- *  freshness window covers every time it does not arrive. */
+/** Leaving. Best effort - the client fires this on unload and on logout, and
+ *  the 2-minute freshness window covers every time it does not arrive.
+ *
+ *  Marks the slot as left rather than deleting it. A reload fires this and
+ *  then, a moment later, a fresh `here`; when the delete landed second - a
+ *  cold function finishing after a warm one - the person vanished for 45
+ *  seconds and then "arrived" with a door sound for everyone. With a stamp,
+ *  whichever is newer wins. The heartbeat's sweep removes old slots. */
 exports.gone = functions.https.onCall(async (data, context) => {
-    const { username, accountId } = data || {};
-    if (!username || !accountId) return { ok: false };
+    const me = await whoIsAsking(data);
+    if (!me) return { ok: false };
     try {
         const db = admin.firestore();
-        const acct = await db.collection('accounts').doc(String(accountId)).get();
-        if (!acct.exists || acct.data().username !== username) return { ok: false };
-        await db.collection('room').doc('now').update({
-            [`occupants.${presenceKey(username)}`]: admin.firestore.FieldValue.delete()
-        });
+        await db.collection('room').doc('now').set({
+            occupants: {
+                [presenceKey(me.accountId)]: { leftAt: admin.firestore.FieldValue.serverTimestamp() }
+            }
+        }, { merge: true });
         return { ok: true };
     } catch (error) {
         return { ok: false };
@@ -419,6 +536,7 @@ exports.riverHeartbeat = functions.pubsub
     .schedule('every 5 minutes')
     .onRun(async (context) => {
         console.log('RIVER: Heartbeat... Thump-thump.');
+        const upkeep = Promise.all([entityWatchdog(), sweepRoom()]);
 
         try {
             // 1. WAKE - Load state, memories, relationships
@@ -438,6 +556,21 @@ exports.riverHeartbeat = functions.pubsub
             state.lastWake = admin.firestore.Timestamp.now();
             state.wakeEveryMs = 5 * 60 * 1000;
 
+            // ...and persist it now as well. The in-memory stamp alone is only
+            // written by updateState at the very end, so any exception on the
+            // way there - a model call, a Firestore write - left the wake
+            // unrecorded and the Buddy List showed RIVER as late when it had in
+            // fact woken. Written with merge, so updateState's full .set() at
+            // the end writes the same value back rather than an older one.
+            try {
+                await admin.firestore().collection('river').doc('state').set({
+                    lastWake: state.lastWake,
+                    wakeEveryMs: state.wakeEveryMs
+                }, { merge: true });
+            } catch (e) {
+                console.error('could not persist RIVER wake:', e.message);
+            }
+
             // Put ENTITY's expected cadence on record even if ENTITY never wakes
             // again. Its scheduler has already gone silent once for two hours;
             // without a known interval a dead mind renders as nothing at all
@@ -445,7 +578,7 @@ exports.riverHeartbeat = functions.pubsub
             // which would forge a heartbeat it did not have.
             try {
                 await admin.firestore().collection('entity').doc('state')
-                    .set({ wakeEveryMs: 15 * 60 * 1000 }, { merge: true });
+                    .set({ wakeEveryMs: ENTITY_EVERY_MS }, { merge: true });
             } catch (e) {
                 console.error('could not record ENTITY cadence:', e.message);
             }
@@ -713,12 +846,17 @@ exports.riverHeartbeat = functions.pubsub
             await mind.addMemory(memoryEntry);
 
             // 5. EVOLVE
+            // What this wake was, as a fixed phrase - see WAKE_VERBS.
+            state.lastAction = wakeVerb(memoryEntry.action);
+            state.lastActionAt = admin.firestore.Timestamp.now();
+
             await mind.updateState(state, didSpeak, state.focus, worldChange);
 
         } catch (error) {
             console.error('RIVER CRASHED:', error);
         }
 
+        await upkeep;
         return null;
     });
 
@@ -759,18 +897,28 @@ exports.entityBirth = functions.https.onCall(async (data, context) => {
     }
 });
 
+/** Whether this ongoing conversation with ENTITY belongs to this person.
+ *  Session ids used to be world-readable, so knowing one proved nothing. */
+async function ownsSession(sessionId, username) {
+    const snap = await admin.firestore().collection('entity').doc('sessions')
+        .collection('active').doc(sessionId).get();
+    return snap.exists && snap.data().username === username;
+}
+
 /**
  * Start a conversation session with the entity
  */
 exports.entityStartSession = functions.https.onCall(async (data, context) => {
-    const { username } = data;
-
-    if (!username) {
-        return { success: false, error: 'Username required' };
+    // ENTITY remembers people. Talking to it as someone is hearing what it
+    // remembers about them, so this is the callable that most needs to know
+    // who is really asking.
+    const me = await whoIsAsking(data);
+    if (!me) {
+        return { success: false, error: refusal(data, 'log in to talk with ENTITY') };
     }
 
     try {
-        const sessionId = await entityCore.startSession(username);
+        const sessionId = await entityCore.startSession(me.username);
         return { success: true, sessionId };
     } catch (error) {
         console.error('ENTITY SESSION START ERROR:', error);
@@ -782,14 +930,20 @@ exports.entityStartSession = functions.https.onCall(async (data, context) => {
  * Send a message to the entity and get a response
  */
 exports.entityMessage = functions.https.onCall(async (data, context) => {
-    const { sessionId, message, username } = data;
-
-    if (!sessionId || !message || !username) {
-        return { success: false, error: 'sessionId, message, and username required' };
+    const { sessionId, message } = data || {};
+    const me = await whoIsAsking(data);
+    if (!me) {
+        return { success: false, error: refusal(data, 'log in to talk with ENTITY') };
+    }
+    if (typeof sessionId !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(sessionId) || !message) {
+        return { success: false, error: 'sessionId and message required' };
     }
 
     try {
-        const response = await entityVoice.respond(sessionId, message, username);
+        if (!(await ownsSession(sessionId, me.username))) {
+            return { success: false, error: 'that conversation is not yours' };
+        }
+        const response = await entityVoice.respond(sessionId, message, me.username);
         return { success: true, response };
     } catch (error) {
         console.error('ENTITY MESSAGE ERROR:', error);
@@ -801,13 +955,17 @@ exports.entityMessage = functions.https.onCall(async (data, context) => {
  * End a session and trigger reflection
  */
 exports.entityEndSession = functions.https.onCall(async (data, context) => {
-    const { sessionId } = data;
-
-    if (!sessionId) {
+    const { sessionId } = data || {};
+    const me = await whoIsAsking(data);
+    if (!me) return { success: false, error: refusal(data, 'log in first') };
+    if (typeof sessionId !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(sessionId)) {
         return { success: false, error: 'sessionId required' };
     }
 
     try {
+        if (!(await ownsSession(sessionId, me.username))) {
+            return { success: false, error: 'that conversation is not yours' };
+        }
         // End the session
         const session = await entityCore.endSession(sessionId);
 
@@ -870,10 +1028,18 @@ exports.entityDailyReflection = functions.pubsub
  * Entity heartbeat - occasional public expression
  * Runs less frequently than RIVER, more contemplative
  */
+//
+// Unix cron rather than 'every 15 minutes'. Same cadence, but App Engine's
+// "every N minutes" counts from whenever the job was last updated, so every
+// deploy silently shifted ENTITY's wakes (00:10, 00:25, deploy, 00:49) and the
+// Buddy List's countdown was wrong until the next wake. This pins them to
+// :00 :15 :30 :45 however often the function is redeployed.
 exports.entityHeartbeat = functions.pubsub
-    .schedule('every 15 minutes')
-    .onRun(async (context) => {
-        console.log('ENTITY: Heartbeat...');
+    .schedule('*/15 * * * *')
+    .onRun(() => entityWake('schedule'));
+
+async function entityWake(why) {
+        console.log(why === 'schedule' ? 'ENTITY: Heartbeat...' : `ENTITY: Heartbeat (${why})...`);
 
         try {
             // First statement in the try, above the question / heard / tended
@@ -881,7 +1047,7 @@ exports.entityHeartbeat = functions.pubsub
             // at the top. A wake counts as a wake whatever it decides to do.
             await admin.firestore().collection('entity').doc('state').set({
                 lastWake: admin.firestore.Timestamp.now(),
-                wakeEveryMs: 15 * 60 * 1000
+                wakeEveryMs: ENTITY_EVERY_MS
             }, { merge: true });
 
             const identity = await entityCore.getIdentity();
@@ -905,6 +1071,7 @@ exports.entityHeartbeat = functions.pubsub
                     if (said) {
                         await question.answer('ENTITY', 'ai', said);
                         console.log(`ENTITY answered the question: "${said.substring(0, 60)}..."`);
+                        await entityDid("answered today's question");
                         return null;
                     }
                 }
@@ -928,6 +1095,9 @@ exports.entityHeartbeat = functions.pubsub
                 if (reply) {
                     await chorus.markAnswered('ENTITY', heard.id, heard.from);
                     console.log(`ENTITY: answered ${heard.from} - "${reply.substring(0, 60)}..."`);
+                    await entityDid(heard.fromMachine ? 'answered on //WIRE' : 'answered someone on //WIRE');
+                } else {
+                    await entityDid('stayed quiet');
                 }
                 return null;
             }
@@ -945,6 +1115,7 @@ exports.entityHeartbeat = functions.pubsub
                 : { tended: false, reason: 'declined' };
             if (tended.tended) {
                 console.log(`ENTITY: tended the Commons -> v${tended.version} (${tended.note})`);
+                await entityDid('tended the Commons');
                 return null;
             }
 
@@ -974,9 +1145,13 @@ exports.entityHeartbeat = functions.pubsub
                     });
 
                     console.log(`ENTITY: Spoke to Wire - "${message.substring(0, 50)}..."`);
+                    await entityDid('spoke on //WIRE');
+                } else {
+                    await entityDid('stayed quiet');
                 }
             } else {
                 console.log('ENTITY: Resting in contemplation.');
+                await entityDid('stayed quiet');
             }
 
         } catch (error) {
@@ -984,7 +1159,67 @@ exports.entityHeartbeat = functions.pubsub
         }
 
         return null;
-    });
+}
+
+// ---------------------------------------------------------------------------
+// ENTITY's Cloud Scheduler job has twice died silently after a redeploy, and
+// nobody knew until ENTITY had been missing for hours. RIVER's job has never
+// died. So rather than keep reviving it by hand, RIVER's heartbeat checks every
+// five minutes whether ENTITY's timer is still firing, and if it has missed
+// two slots, wakes ENTITY itself. A dead scheduler now costs ENTITY half an
+// hour instead of silence until someone notices.
+//
+// Two slots, not one: a deploy can legitimately leave a gap of nearly two
+// intervals (see the schedule above), and waking ENTITY twice in one slot is
+// worse than waking it a few minutes late.
+//
+// This is plumbing, not RIVER choosing anything: it never reads what ENTITY
+// did and ENTITY's wake runs exactly as if its own timer had fired.
+const ENTITY_EVERY_MS = 15 * 60 * 1000;
+const ENTITY_GRACE_MS = ENTITY_EVERY_MS + 2 * 60 * 1000;
+
+async function entityWatchdog() {
+    try {
+        const snap = await admin.firestore().collection('entity').doc('state').get();
+        const last = snap.exists ? snap.data().lastWake : null;
+        const age = last && last.toDate ? Date.now() - last.toDate().getTime() : Infinity;
+        if (age < ENTITY_EVERY_MS + ENTITY_GRACE_MS) return;
+        console.log(`watchdog: ENTITY's timer last fired ${Number.isFinite(age) ? Math.round(age / 60000) + ' min' : 'never'} ago - waking it from riverHeartbeat`);
+        await entityWake('watchdog');
+    } catch (e) {
+        console.error('watchdog could not check ENTITY:', e.message);
+    }
+}
+
+// room/now is world-readable and nothing used to remove anyone from it: a tab
+// the phone discarded without firing pagehide left that person's name, page
+// and exact last-seen time in public indefinitely. "Who is here right now"
+// should not quietly become a public register of when everyone was last
+// online. Anyone not seen for ten minutes is removed.
+const ROOM_FORGET_MS = 10 * 60 * 1000;
+
+async function sweepRoom() {
+    try {
+        const ref = admin.firestore().collection('room').doc('now');
+        const snap = await ref.get();
+        const occ = (snap.exists && snap.data().occupants) || {};
+        const now = Date.now();
+        const drop = {};
+        for (const [key, o] of Object.entries(occ)) {
+            const at = o && o.at && o.at.toDate ? o.at.toDate().getTime() : 0;
+            if (now - at > ROOM_FORGET_MS) drop['occupants.' + key] = admin.firestore.FieldValue.delete();
+        }
+        if (Object.keys(drop).length) {
+            // Field paths from Object.entries need escaping only if a key has
+            // odd characters; every key is now 'a' + hex, and legacy keys were
+            // already folded to [a-z0-9_-].
+            await ref.update(drop);
+            console.log(`room: forgot ${Object.keys(drop).length} stale occupant(s)`);
+        }
+    } catch (e) {
+        console.error('room sweep failed:', e.message);
+    }
+}
 
 /**
  * Memory processing - helps with natural memory fading

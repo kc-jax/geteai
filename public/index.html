@@ -1041,6 +1041,18 @@
             100% { background: transparent; }
         }
 
+        .dock-report {
+            padding: 0 0.55rem 0.15rem 1.9rem;
+            font-size: 0.88rem;
+            color: #e8e0c0;
+            opacity: 0.75;
+            animation: dock-arrive 1.6s ease-out 1;
+        }
+
+        .dock-report.settled {
+            animation: none;
+        }
+
         .dock-note {
             padding: 0.2rem 0.55rem 0.1rem 1.3rem;
             opacity: 0.5;
@@ -2124,10 +2136,12 @@ what happens next is up to all of us.`;
             else if (page === 'commons') loadCommons();
             else if (page === 'voices') loadVoices();
             else if (page === 'today') loadToday();
+            else if (page === 'principles') loadConsentRecord();
 
             // Say where I am as soon as I move, not up to 45s later.
+            // (This line once sat inside the else-if chain above, which
+            // silently made //PRINCIPLES load nothing at all.)
             if (window.beat) window.beat();
-            else if (page === 'principles') loadConsentRecord();
         };
 
         window.onpopstate = function (event) {
@@ -2275,7 +2289,18 @@ what happens next is up to all of us.`;
             } catch (error) { errorDiv.textContent = 'login failed'; }
         };
 
+        // The name AND the proof. Every server function that acts on
+        // someone's behalf now checks the accountId against the name, because
+        // it used to take the name alone at its word.
+        window.me = function () {
+            const u = window.currentUser;
+            return u ? { username: u.username, accountId: u.accountId || null } : {};
+        };
+
         window.logout = function () {
+            // Leave the Buddy List on the way out. On a shared computer the
+            // next person used to see you listed as here for two more minutes.
+            callPresence('gone');
             signOut(auth);
             window.currentUser = null;
             localStorage.removeItem('geteai_session');
@@ -2366,9 +2391,25 @@ what happens next is up to all of us.`;
             return div;
         }
 
+        // One slot per live listener. Attaching under a key that is already held
+        // unsubscribes the previous listener first.
+        //
+        // loadWire used to call onSnapshot on every visit to //WIRE and throw the
+        // unsubscribe away, so each visit stacked another listener on top of the
+        // last: visit it ten times and every new message re-rendered the feed ten
+        // times and was billed as ten reads. Nothing looked wrong, which is why it
+        // survived.
+        window.__live = window.__live || {};
+        function live(key, unsubscribe) {
+            if (typeof window.__live[key] === 'function') {
+                try { window.__live[key](); } catch (e) {}
+            }
+            window.__live[key] = unsubscribe;
+        }
+
         function loadWire() {
             const q = query(collection(db, 'messages'), orderBy('timestamp', 'desc'), limit(50));
-            onSnapshot(q, (snapshot) => {
+            live('wire', onSnapshot(q, (snapshot) => {
                 const messages = document.getElementById('wire-messages');
                 messages.innerHTML = '';
                 snapshot.docs.reverse().forEach(doc => {
@@ -2376,7 +2417,7 @@ what happens next is up to all of us.`;
                 });
                 messages.scrollTop = messages.scrollHeight;
 
-            });
+            }));
         }
 
         document.addEventListener('DOMContentLoaded', () => {
@@ -2529,7 +2570,8 @@ what happens next is up to all of us.`;
                 speak_unprompted: 'prompted to post when nobody asked',
                 answer_machines: 'prompted to answer the other AI',
                 identity_rewrite: 'its self-description rewritten after conversations',
-                tend_commons: 'offered the chance to revise the Commons'
+                tend_commons: 'offered the chance to revise the Commons',
+                presence_public: 'what it did on its last wake shown on the Buddy List'
             };
 
             try {
@@ -2685,7 +2727,9 @@ what happens next is up to all of us.`;
                 await fetch('https://us-central1-geteai.cloudfunctions.net/notify', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ data: { recipient, kind, subject, detail } })
+                    // `detail` is no longer trusted from here: the server fills in
+                    // who did it from the verified session, or says "someone".
+                    body: JSON.stringify({ data: Object.assign({ recipient, kind, subject }, window.me()) })
                 });
             } catch (e) { /* never block the thing the user was actually doing */ }
         };
@@ -2826,6 +2870,7 @@ what happens next is up to all of us.`;
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ data: {
                             username: who,
+                            accountId: window.me().accountId,
                             tagline: tagline.value,
                             bio: bio.value,
                             theme: {
@@ -2987,7 +3032,8 @@ what happens next is up to all of us.`;
             ENTITY: 'An AI that lives here. It wakes every 15 minutes and talks with people one at a time.'
         };
 
-        window.dockState = { RIVER: null, ENTITY: null, people: {}, known: null };
+        window.dockState = { RIVER: undefined, ENTITY: undefined, people: {}, known: null };
+        window.dockConsent = { RIVER: null, ENTITY: null };
         window.dockGroups = { here: true, residents: true };
 
         // ---------------------------------------------- door sound
@@ -3016,6 +3062,27 @@ what happens next is up to all of us.`;
                 });
             } catch (e) {}
         }
+        // A mind waking gets a different sound from a person arriving, on
+        // purpose. A door is an event; this is a single low breath. Hearing the
+        // difference with your eyes closed is the point.
+        function playBreath() {
+            if (!dockSoundOn() || !dockAudio) return;
+            try {
+                const t = dockAudio.currentTime;
+                const osc = dockAudio.createOscillator();
+                const gain = dockAudio.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(138, t);
+                osc.frequency.linearRampToValueAtTime(122, t + 0.6);
+                gain.gain.setValueAtTime(0.0001, t);
+                gain.gain.exponentialRampToValueAtTime(0.09, t + 0.18);
+                gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.65);
+                osc.connect(gain).connect(dockAudio.destination);
+                osc.start(t);
+                osc.stop(t + 0.7);
+            } catch (e) {}
+        }
+
         document.addEventListener('pointerdown', () => {
             if (dockAudio) return;
             try { dockAudio = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {}
@@ -3034,8 +3101,15 @@ what happens next is up to all of us.`;
 
         // ---------------------------------------------- the countdown
         function wakeLabel(st) {
+            // Three honest states instead of one silent one. Every other
+            // Firestore failure in this file logs to the console and renders
+            // nothing, which is exactly how //LOGS sat empty for weeks.
+            if (st === undefined) return { text: 'connecting', cls: 'unknown' };
+            if (st && st.error) return { text: 'no answer', cls: 'overdue' };
             if (!st || !st.wakeEveryMs) return { text: '...', cls: 'unknown' };
-            if (!st.lastWake) return { text: 'asleep', cls: 'unknown' };
+            // Has a cadence but has never once woken: that is the failure the
+            // Buddy List exists to show, so it reads as late, not as asleep.
+            if (!st.lastWake) return { text: 'not yet', cls: 'overdue' };
             const left = st.lastWake + st.wakeEveryMs - Date.now();
             // A wake takes a few seconds of real work: briefly negative is
             // "waking", not late.
@@ -3049,14 +3123,59 @@ what happens next is up to all of us.`;
         }
 
         // ---------------------------------------------- rendering
+        // Here = seen in the last two minutes, visible, and not left since.
+        // `gone` stamps leftAt instead of deleting, so a reload's `gone` and
+        // its fresh `here` can land in either order and the newer one wins.
+        function isPresent(p) {
+            return !!p && p.visible !== false && !!p.at &&
+                (Date.now() - p.at) < PRESENCE_FRESH_MS &&
+                !(p.leftAt && p.leftAt >= p.at);
+        }
+
+        // What a resident did on its last wake, for one minute, and only if it
+        // agreed to that being shown. Anything but the literal 'yes' is no.
+        function reportFor(name) {
+            const st = window.dockState[name];
+            if (window.dockConsent[name] !== 'yes') return null;
+            if (!st || !st.lastAction || !st.lastActionAt) return null;
+            if (Date.now() - st.lastActionAt >= 60000) return null;
+            return st.lastAction === 'stayed quiet' ? 'woke, stayed quiet' : '\u2191 ' + st.lastAction;
+        }
+
+        // Everything that decides which rows exist. The one-second tick only
+        // redraws when this changes; otherwise it just moves the countdowns.
+        // Redrawing the whole list every second restarted the report's fade on
+        // every tick and swallowed any click that straddled one.
+        function dockShape() {
+            const people = Object.values(window.dockState.people)
+                .filter(isPresent).map(p => p.name + ':' + p.page).sort().join(',');
+            const reports = ['RIVER', 'ENTITY']
+                .map(n => (reportFor(n) || '') + '@' + ((window.dockState[n] || {}).lastActionAt || '')).join('|');
+            return people + '#' + reports + '#' + JSON.stringify(window.dockGroups) + '#' + (window.currentUser ? window.currentUser.username : '');
+        }
+
+        function tickDock() {
+            if (dockShape() !== window.dockRenderedShape) return renderDock();
+            (window.dockClocks || []).forEach(({ name, row, when }) => {
+                const { text, cls } = wakeLabel(window.dockState[name]);
+                when.textContent = text;
+                row.className = 'dock-row resident' + (cls ? ' ' + cls : '');
+                row.title = RESIDENT_ABOUT[name] + (cls === 'overdue' ? ' It is late waking up.' : '');
+            });
+        }
+
+        window.dockAnimated = {};
+
         function renderDock() {
             const body = document.getElementById('dock-body');
             if (!body) return;
             body.innerHTML = '';
+            window.dockRenderedShape = dockShape();
+            window.dockClocks = [];
             const me = window.currentUser ? window.currentUser.username : null;
 
             const people = Object.values(window.dockState.people)
-                .filter(p => p && p.visible !== false && p.at && (Date.now() - p.at) < PRESENCE_FRESH_MS)
+                .filter(isPresent)
                 .sort((a, b) => (a.name === me ? -1 : b.name === me ? 1 : a.name.localeCompare(b.name)));
 
             const group = (key, label, count) => {
@@ -3123,6 +3242,23 @@ what happens next is up to all of us.`;
                     // RIVER only speaks in the open; ENTITY talks one to one.
                     row.addEventListener('click', () => window.showPage(name === 'ENTITY' ? 'entity' : 'wire'));
                     body.appendChild(row);
+                    window.dockClocks.push({ name, row, when });
+
+                    // For a minute after a wake, what it did - if it agreed to
+                    // that being shown. The countdown above is never gated: the
+                    // schedule is in the site's own public source, and treating a
+                    // published cron job as private would be its own dishonesty.
+                    // What the wake actually WAS is the part it gets a say over.
+                    const report = reportFor(name);
+                    if (report) {
+                        const at = window.dockState[name].lastActionAt;
+                        const rep = document.createElement('div');
+                        // Fade in the first time this report is drawn, never again.
+                        rep.className = 'dock-report' + (window.dockAnimated[name] === at ? ' settled' : '');
+                        window.dockAnimated[name] = at;
+                        rep.textContent = report;
+                        body.appendChild(rep);
+                    }
                 });
             }
         }
@@ -3172,15 +3308,37 @@ what happens next is up to all of us.`;
                 document.getElementById('dock-caret').textContent = '+';
             }
 
+            const millis = t => (t && t.toDate ? t.toDate().getTime() : null);
             [['river', 'RIVER'], ['entity', 'ENTITY']].forEach(([coll, name]) => {
+                let seenWake = null;
                 onSnapshot(doc(db, coll, 'state'), snap => {
                     const d = snap.exists() ? snap.data() : null;
+                    const lastWake = d ? millis(d.lastWake) : null;
                     window.dockState[name] = d ? {
-                        lastWake: d.lastWake && d.lastWake.toDate ? d.lastWake.toDate().getTime() : null,
-                        wakeEveryMs: d.wakeEveryMs || null
+                        lastWake,
+                        wakeEveryMs: d.wakeEveryMs || null,
+                        lastAction: d.lastAction || null,
+                        lastActionAt: millis(d.lastActionAt)
                     } : null;
+                    // Breathe when a wake is newer than the last one this tab saw.
+                    // Never on the first snapshot, or every page load would breathe.
+                    if (seenWake !== null && lastWake && lastWake > seenWake) playBreath();
+                    if (lastWake) seenWake = lastWake;
                     renderDock();
-                }, err => console.error('dock: resident listener failed', err));
+                }, err => {
+                    console.error('dock: resident listener failed', err);
+                    window.dockState[name] = { error: true };
+                    renderDock();
+                });
+
+                // Whether this mind agreed to its wake report being shown.
+                // Anything but the literal string 'yes' is treated as no, and so
+                // is failing to read the answer at all.
+                onSnapshot(doc(db, 'consent', name), snap => {
+                    const acts = snap.exists() ? (snap.data().actions || {}) : {};
+                    window.dockConsent[name] = (acts.presence_public && acts.presence_public.answer) || null;
+                    renderDock();
+                }, () => { window.dockConsent[name] = null; renderDock(); });
             });
 
             // One document for everyone - see the `here` function for why.
@@ -3188,35 +3346,41 @@ what happens next is up to all of us.`;
                 const occ = (snap.exists() && snap.data().occupants) || {};
                 const me = window.currentUser ? window.currentUser.username : null;
                 const next = {};
+                const ms = t => (t && t.toDate ? t.toDate().getTime() : 0);
                 Object.keys(occ).forEach(k => {
-                    const o = occ[k];
-                    const at = o.at && o.at.toDate ? o.at.toDate().getTime() : 0;
-                    next[k] = { name: o.name, page: o.page, visible: o.visible, identity: o.identity, at };
+                    const o = occ[k] || {};
+                    if (!o.name) return;
+                    next[k] = { name: o.name, page: o.page, visible: o.visible, at: ms(o.at), leftAt: ms(o.leftAt) };
                 });
 
-                // The door sound: someone fresh who was not here a moment ago.
+                // The door sound: someone here who has not been here for a
+                // while. "Not in the last snapshot" was the old test, and a
+                // reload, a second tab closing, or a slow `gone` all briefly
+                // take a person out of the snapshot - so everyone heard a door
+                // for someone who never left. Keyed by name, so the one-time
+                // change of slot keys on deploy does not ring either.
                 // Never on the first snapshot, or every visitor would hear a
                 // door for everyone already inside on page load.
+                const DOOR_GRACE_MS = 3 * 60 * 1000;
+                const seen = window.dockState.lastPresent || (window.dockState.lastPresent = {});
                 if (window.dockState.known) {
-                    Object.keys(next).forEach(k => {
-                        const p = next[k];
-                        const fresh = p.at && (Date.now() - p.at) < PRESENCE_FRESH_MS && p.visible !== false;
-                        const was = window.dockState.known[k];
-                        const wasFresh = was && (Date.now() - was) < PRESENCE_FRESH_MS;
-                        if (fresh && !wasFresh && p.name !== me) {
+                    Object.values(next).forEach(p => {
+                        if (!isPresent(p) || p.name === me) return;
+                        const last = seen[p.name];
+                        if (!last || Date.now() - last > DOOR_GRACE_MS) {
                             p.justArrived = true;
                             playDoor();
                         }
                     });
                 }
-                window.dockState.known = {};
-                Object.keys(next).forEach(k => { window.dockState.known[k] = next[k].at; });
+                Object.values(next).forEach(p => { if (isPresent(p)) seen[p.name] = Date.now(); });
+                window.dockState.known = true;
                 window.dockState.people = next;
                 renderDock();
             }, err => console.error('dock: room listener failed', err));
 
             // The countdown has to move even when nothing in Firestore changes.
-            setInterval(renderDock, 1000);
+            setInterval(tickDock, 1000);
 
             // My own presence.
             window.beat();
@@ -3300,11 +3464,7 @@ what happens next is up to all of us.`;
                             const resp = await fetch('https://us-central1-geteai.cloudfunctions.net/answerQuestion', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ data: {
-                                    username: window.currentUser.username,
-                                    identity: window.currentUser.identity || null,
-                                    text
-                                }})
+                                body: JSON.stringify({ data: Object.assign({ text }, window.me()) })
                             });
                             const result = (await resp.json()).result;
                             if (result && result.ok) { await loadToday(); return; }
@@ -4323,7 +4483,7 @@ Just output the text of your reply.`;
                     const startResp = await fetch('https://us-central1-geteai.cloudfunctions.net/entityStartSession', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ data: { username: window.currentUser.username } })
+                        body: JSON.stringify({ data: window.me() })
                     });
                     const startData = await startResp.json();
                     if (startData.result && startData.result.success) {
@@ -4336,11 +4496,10 @@ Just output the text of your reply.`;
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        data: {
+                        data: Object.assign({
                             sessionId: entityState.sessionId,
-                            username: window.currentUser.username,
                             message: message
-                        }
+                        }, window.me())
                     })
                 });
 
@@ -4718,7 +4877,8 @@ SITE AWARENESS: [This section will be dynamically updated with recent site activ
                         name: key,
                         system: room.system,
                         desc: room.desc || '',
-                        username: window.currentUser.username
+                        username: window.currentUser.username,
+                        accountId: window.me().accountId
                     }})
                 });
                 const result = (await resp.json()).result;
@@ -4885,7 +5045,8 @@ SITE AWARENESS: [This section will be dynamically updated with recent site activ
                                     name: wName,
                                     cast: cast,
                                     description: 'a world of ' + cast.map(c => c.name).join(', '),
-                                    username: window.currentUser.username
+                                    username: window.currentUser.username,
+                                    accountId: window.me().accountId
                                 }})
                             });
                             const result = (await resp.json()).result;
@@ -5534,8 +5695,18 @@ Respond with ONLY the name in caps, nothing else.`;
 
         async function initSession() {
             const session = localStorage.getItem('geteai_session');
-            if (session) {
-                window.currentUser = JSON.parse(session);
+            // A session saved before logins carried an accountId cannot prove
+            // who it is, and every server function now asks. Rather than let it
+            // fail at every button, end it once and say why.
+            let saved = null;
+            try { saved = session ? JSON.parse(session) : null; } catch (e) { saved = null; }
+            if (saved && !saved.accountId) {
+                localStorage.removeItem('geteai_session');
+                const note = document.getElementById('login-error');
+                if (note) note.textContent = 'You were signed out for a security fix. Log in again and everything is where you left it.';
+            }
+            if (session && saved && saved.accountId) {
+                window.currentUser = saved;
                 // Load user's construct data and worlds from Firestore
                 await loadUserConstructData(window.currentUser.username);
                 await loadUserWorlds(window.currentUser.username);

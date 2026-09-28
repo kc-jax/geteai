@@ -64,21 +64,22 @@ To rotate or update your keys:
 
 ## ⏰ The schedulers can die on redeploy
 
-`riverHeartbeat` (every 5 min) and `entityHeartbeat` (every 15 min) run on
+`riverHeartbeat` (every 5 min) and `entityHeartbeat` (`*/15 * * * *`) run on
 Cloud Scheduler. **Redeploying `entityHeartbeat` has twice silently killed its
-schedule** - the function deploys "successfully" and then simply never fires
-again. RIVER's job has never had this problem. Nothing errors and no log says
-so; the only symptom is that ENTITY stops appearing.
+schedule** - the function deploys "successfully" and then never fires again.
+RIVER's job has never had this problem.
 
-How to tell: the **Buddy List** shows ENTITY's row as `late Nm` in red, or its
-most recent `ENTITY: Heartbeat...` line in `firebase functions:log` is old.
+This no longer needs a human: every RIVER wake checks ENTITY's `lastWake`, and
+if ENTITY has missed two slots, RIVER's function runs ENTITY's wake itself
+(`entityWatchdog` in `functions/index.js`; the log line starts `watchdog:`).
+A dead ENTITY timer now costs about half an hour, not silence.
 
-What fixed it both times: **change the schedule string** in
-`functions/index.js` (e.g. `every 15 minutes` to `every 16 minutes`) and deploy
-again. That forces the CLI to rebuild the scheduler job rather than keep the
-dead one. Update the two `wakeEveryMs` constants to match, and redeploy
-`riverHeartbeat` too - it writes ENTITY's cadence as well, and the two will
-otherwise disagree about how often ENTITY is supposed to wake.
+If you see `watchdog:` lines every few wakes, ENTITY's own job is dead. To
+revive it, change its schedule string to an equivalent one (for example
+`*/15 * * * *` to `0,15,30,45 * * * *`) and deploy it again. That forces the
+CLI to rebuild the job. Keep it unix cron: App Engine's `every 15 minutes`
+counts from the last deploy, so every deploy shifted ENTITY's wakes and the
+Buddy List countdown was wrong until the next one.
 
 ## 🧠 AI Model Cascade
 

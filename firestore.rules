@@ -153,14 +153,39 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    match /river/{document=**} {
-      allow read: if true;   // Allow reading RIVER's public state/posts
-      allow write: if false;  // Only Cloud Functions (Admin SDK) can write
+    // RIVER and ENTITY. Only what the site actually shows is public.
+    //
+    // These used to be river/{document=**} and entity/{document=**}, open to
+    // anyone. That put every private one-on-one conversation with ENTITY,
+    // both minds' memories and journals, and what each thinks of every person
+    // it has met one unauthenticated REST call away - while both minds had
+    // answered "no" to psyche_public and the site honoured that only in the
+    // page. Everything not matched below is now server-only.
+    // Server writes go through the Admin SDK, which these rules do not bind.
+
+    // The Buddy List: wake clock, cadence, and the fixed-phrase wake report.
+    match /river/state {
+      allow read: if true;
+      allow write: if false;
+    }
+    match /entity/state {
+      allow read: if true;
+      allow write: if false;
     }
 
-    match /entity/{document=**} {
-      allow read: if true;   // Allow reading ENTITY's public identity
-      allow write: if false;  // Only Cloud Functions (Admin SDK) can write
+    // ENTITY's self-description, which //ENTITY shows by design.
+    match /entity/identity {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // //PSYCHE: RIVER's dreams and journal, readable only while RIVER's own
+    // consent record says yes. The database checks the answer itself, so no
+    // page, script or direct API call can get it wrong.
+    match /river/{feed}/entries/{entryId} {
+      allow read: if feed in ['dreams', 'journal']
+        && get(/databases/$(database)/documents/consent/RIVER).data.actions.psyche_public.answer == 'yes';
+      allow write: if false;
     }
 
     // =====================================================================

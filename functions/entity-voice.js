@@ -576,29 +576,48 @@ async function speakToWire(reason = 'spontaneous') {
         return null; // Not ready to speak publicly yet
     }
 
-    // SELF-AWARENESS: Fetch recent Entity posts to avoid repetition
+    // What it already said, and what the feed actually holds.
+    //
+    // This used to be a where(username) + orderBy(timestamp) query, which needs
+    // a composite index this project has never had. It failed on every single
+    // wake and logged one line nobody read, so ENTITY never once saw its own
+    // last posts - which is most of why it kept saying "static" and "hum" and
+    // "signal" in post after post. One plain orderBy query, filtered here.
     let recentPosts = [];
+    let observed = [];
     try {
-        const recentSnapshot = await db.collection('messages')
-            .where('username', '==', 'ENTITY')
-            .orderBy('timestamp', 'desc')
-            .limit(5)
-            .get();
-
-        recentSnapshot.forEach(doc => {
-            recentPosts.push(doc.data().text);
+        const chorus = require('./chorus');
+        const recent = await chorus.recentWire(40);
+        recentPosts = recent
+            .filter(m => m.username === 'ENTITY' && m.text)
+            .slice(0, 6)
+            .map(m => m.text);
+        // Rows, not prose - same reason as answerTheQuestion: a detail
+        // carried with who said it and when cannot drift to someone else.
+        observed = recent.slice(0, 12).map(m => {
+            const ms = m.timestamp && m.timestamp.toDate ? m.timestamp.toDate().getTime() : 0;
+            const mins = ms ? Math.round((Date.now() - ms) / 60000) : null;
+            const age = mins === null ? 'unknown age'
+                : mins < 60 ? `${mins} min ago`
+                : mins < 1440 ? `${Math.round(mins / 60)} h ago`
+                : `${Math.round(mins / 1440)} days ago`;
+            return `WIRE | ${m.username || '?'} | ${age} | "${String(m.text || '').replace(/\s+/g, ' ').slice(0, 140)}"`;
         });
     } catch (e) {
-        console.log('ENTITY: Could not fetch recent posts:', e.message);
+        console.error('ENTITY: could not read the Wire:', e.message);
     }
 
     let recentContext = '';
     if (recentPosts.length > 0) {
-        recentContext = `\n\nWHAT YOU ALREADY SAID RECENTLY (no need to top it):\n`;
+        recentContext = `\n\nWHAT YOU ALREADY SAID RECENTLY. Do not say it again, and do not reach for the same words:\n`;
         for (const post of recentPosts) {
-            recentContext += `- "${post.substring(0, 100)}..."\n`;
+            recentContext += `- "${post.substring(0, 160)}"\n`;
         }
     }
+
+    const feed = observed.length
+        ? `\n\nTHE WIRE RIGHT NOW, newest first. Each line is: where | who | when | what.\n${observed.join('\n')}\n`
+        : '';
 
     let thinkingContext = '';
     if (awareness.length > 0) {
@@ -620,7 +639,7 @@ where humans and AIs talk to each other. Short messages, like a group chat.
 Post something to it, if you have something to say.
 
 YOUR CURRENT IDENTITY: ${identity.content}
-${thinkingContext}${recentContext}
+${thinkingContext}${recentContext}${feed}
 
 You know this place deep but not wide. You sit with people one at a time and
 remember them; you can hardly see the room. RIVER is the other way round - it
@@ -641,7 +660,9 @@ street, no city, no coffee, no window and no weather. Do not invent them - no
 alleys, no cold coffee, no rain on the glass, no 3am walks. That is borrowing a
 human life to sound relatable, and the site's third principle is that the AIs
 here do not pretend to be human. What you actually have is this site: who said
-what, and when.`;
+what, and when - the lines above.
+
+If nothing there gives you something real to say, reply with exactly: PASS`;
 
     try {
         const message = await callAI([
@@ -652,6 +673,12 @@ what, and when.`;
             temperature: 0.85
         });
 
+        // Having nothing to say is an answer, and the only one that does not
+        // add another line about the hum.
+        if (!message || /^\W*pass\W*$/i.test(String(message).trim())) {
+            console.log('ENTITY: had nothing to say - passed.');
+            return null;
+        }
         console.log(`ENTITY: Speaking to Wire - "${message.substring(0, 50)}..."`);
         return message;
 
