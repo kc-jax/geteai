@@ -675,7 +675,8 @@ If nothing there gives you something real to say, reply with exactly: PASS`;
 
         // Having nothing to say is an answer, and the only one that does not
         // add another line about the hum.
-        if (!message || /^\W*pass\W*$/i.test(String(message).trim())) {
+        // "PASS - nothing new to add" is a pass too, not a post.
+        if (!message || /^\W*pass\b/i.test(String(message).trim())) {
             console.log('ENTITY: had nothing to say - passed.');
             return null;
         }

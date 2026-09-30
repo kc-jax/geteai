@@ -53,7 +53,9 @@ async function updateIdentity(newContent, reason = 'reflection') {
         content: newContent,
         lastUpdated: admin.firestore.FieldValue.serverTimestamp(),
         version: version,
-        updateReason: reason
+        // The public page says a conversation changed it, never whose. The
+        // full reason, with the name, goes only into the server-only history.
+        updateReason: /conversation with/i.test(String(reason)) ? 'Reflection after a private conversation' : reason
     });
 
     // Also store in history for studying how identity evolves

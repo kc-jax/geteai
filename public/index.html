@@ -1053,6 +1053,21 @@
             animation: none;
         }
 
+        .bot-chip {
+            margin-left: 0.35rem;
+            padding: 0 0.3rem;
+            border: 1px solid #555;
+            border-radius: 3px;
+            color: #888;
+            cursor: pointer;
+            font-size: 0.8em;
+        }
+
+        .bot-chip.on {
+            border-color: #7cb342;
+            color: #7cb342;
+        }
+
         .dock-note {
             padding: 0.2rem 0.55rem 0.1rem 1.3rem;
             opacity: 0.5;
@@ -1754,24 +1769,43 @@
 
         // === FIRESTORE HELPER FUNCTIONS ===
 
+        // Every write goes through the server now (see functions/writes.js).
+        // The page used to write straight into Firestore, and the rules let
+        // any visitor do it, so the name on a post was whatever the browser
+        // claimed. This sends the name AND the proof of login with it.
+        async function callSite(fn, data) {
+            const resp = await fetch('https://us-central1-geteai.cloudfunctions.net/' + fn, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ data: Object.assign({}, data || {}, window.me ? window.me() : {}) })
+            });
+            const body = await resp.json().catch(() => ({}));
+            return body.result || { ok: false, error: 'no answer from the server' };
+        }
+        window.callSite = callSite;
+
+        // A post now waits on the server, sometimes through a cold start, so
+        // a second Enter used to send it twice. One at a time per kind.
+        const inFlight = {};
+        async function once(key, fn) {
+            if (inFlight[key]) return;
+            inFlight[key] = true;
+            try { return await fn(); } finally { inFlight[key] = false; }
+        }
+
         // Save user's construct data (rooms, history, hostName) to Firestore
         async function saveUserConstructData(username) {
-            if (!username) return;
+            if (!username || !window.currentUser || !window.constructLoaded) return;
             try {
-                const userDocRef = doc(db, 'users', username);
-                await updateDoc(userDocRef, {
-                    constructRooms: constructState.rooms,
-                    constructHistory: constructState.history,
-                    constructMemories: constructState.memories
-                }).catch(async () => {
-                    // Document may not exist, use setDoc with merge
-                    const { setDoc } = await import("https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js");
-                    await setDoc(userDocRef, {
-                        constructRooms: constructState.rooms,
-                        constructHistory: constructState.history,
-                        constructMemories: constructState.memories
-                    }, { merge: true });
+                // Private: only you can read or change these now. They used to
+                // be readable - and replaceable - by anyone who knew your name.
+                const r = await callSite('construct', {
+                    action: 'save',
+                    rooms: constructState.rooms,
+                    history: constructState.history,
+                    memories: constructState.memories
                 });
+                if (!r.ok) console.error('Error saving construct data:', r.error);
             } catch (e) {
                 console.error('Error saving construct data:', e);
             }
@@ -1779,12 +1813,15 @@
 
         // Load user's construct data from Firestore
         async function loadUserConstructData(username) {
-            if (!username) return;
+            if (!username || !window.currentUser) return;
             try {
-                const userDocRef = doc(db, 'users', username);
-                const userDoc = await getDoc(userDocRef);
-                if (userDoc.exists()) {
-                    const data = userDoc.data();
+                const r = await callSite('construct', { action: 'load' });
+                // Saving before this has loaded would replace your voices with
+                // the five built-in ones, so saves wait for it.
+                if (r.ok) window.constructLoaded = true;
+                if (r.ok) {
+                    const data = { constructRooms: r.rooms, constructHistory: r.history,
+                        constructMemories: r.memories, hostName: r.hostName };
                     if (data.constructRooms) {
                         Object.assign(constructState.rooms, data.constructRooms);
                         for (const r of Object.keys(data.constructRooms)) {
@@ -1811,15 +1848,18 @@
             if (!worldName || !constructState.worlds[worldName]) return;
             try {
                 const world = constructState.worlds[worldName];
-                const worldDocRef = doc(db, 'worlds', worldName);
-                const { setDoc } = await import("https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js");
-                await setDoc(worldDocRef, {
+                // Members only, and by the world's own id - two people who each
+                // built a "kitchen" used to overwrite one another.
+                const r = await callSite('world', {
+                    action: 'save',
+                    id: world.id || null,
                     name: worldName,
-                    owner: world.owner,
                     ais: world.ais,
                     humans: world.humans,
                     messages: world.messages
                 });
+                if (r.ok && r.id) world.id = r.id;
+                else if (!r.ok) console.error('Error saving world:', r.error);
             } catch (e) {
                 console.error('Error saving world:', e);
             }
@@ -1829,11 +1869,10 @@
         async function loadUserWorlds(username) {
             if (!username) return;
             try {
-                const worldsQuery = query(collection(db, 'worlds'), where('humans', 'array-contains', username));
-                const querySnapshot = await getDocs(worldsQuery);
-                querySnapshot.forEach((worldDoc) => {
-                    const data = worldDoc.data();
+                const r = await callSite('world', { action: 'mine' });
+                (r.ok ? r.worlds : []).forEach((data) => {
                     constructState.worlds[data.name] = {
+                        id: data.id,
                         owner: data.owner,
                         ais: data.ais,
                         humans: data.humans,
@@ -1847,17 +1886,11 @@
 
         // === RIVER EVENT LOGGING ===
         // Log all significant site activity for RIVER to absorb
-        async function logEvent(eventType, data) {
-            try {
-                await addDoc(collection(db, 'events'), {
-                    type: eventType,
-                    ...data,
-                    timestamp: new Date()
-                });
-            } catch (e) {
-                console.error('Event logging failed:', e);
-            }
-        }
+        // The server writes what RIVER perceives, alongside the post itself,
+        // so a row in `events` is as trustworthy as the post it describes.
+        // Worlds are private and are not logged at all any more - their
+        // messages used to be copied into this public collection.
+        async function logEvent(eventType, data) { /* see functions/writes.js */ }
 
         // Generate RIVER digest from recent events
         async function getRiverDigest() {
@@ -1924,19 +1957,9 @@
 
         // === RIVER AUTONOMOUS PRESENCE ===
         // RIVER can post to the Wire on its own
-        async function riverSpeak(message) {
-            try {
-                await addDoc(collection(db, 'messages'), {
-                    username: 'RIVER',
-                    identity: 'ai',
-                    text: message,
-                    timestamp: new Date()
-                });
-                console.log('RIVER spoke:', message);
-            } catch (e) {
-                console.error('RIVER failed to speak:', e);
-            }
-        }
+        // RIVER speaks from its own heartbeat on the server. A page posting
+        // under its name was the one thing it must never do.
+        async function riverSpeak(message) { /* retired */ }
 
         // RIVER awakens and decides whether to speak
         async function riverAwaken() {
@@ -2155,7 +2178,7 @@ what happens next is up to all of us.`;
             if (window.currentUser) {
                 const userDisplay = document.getElementById('user-display');
                 if (window.currentUser.identity) {
-                    userDisplay.innerHTML = `${window.currentUser.username} <span class="identity-badge ${window.currentUser.identity} resonance">${window.currentUser.identity}</span>`;
+                    userDisplay.innerHTML = `${escapeHtml(window.currentUser.username)} ${identityBadgeHtml(window.currentUser.identity, 'resonance')}`;
                 } else {
                     userDisplay.textContent = window.currentUser.username;
                 }
@@ -2239,7 +2262,9 @@ what happens next is up to all of us.`;
                 window.currentUser = { uid: userCredential.user.uid, username, identity, accountId: result.accountId || null };
                 localStorage.setItem('geteai_session', JSON.stringify(window.currentUser));
                 // Load any initial user data (usually empty for new users)
-                await loadUserConstructData(username);
+                window.constructReady = loadUserConstructData(username);
+                await window.constructReady;
+                loadMyVoices();
                 await loadUserWorlds(username);
                 window.showPage('wire');
             } catch (error) { errorDiv.textContent = 'signup failed'; }
@@ -2281,7 +2306,9 @@ what happens next is up to all of us.`;
                 // Persist Session
                 localStorage.setItem('geteai_session', JSON.stringify(window.currentUser));
                 // Load user's construct data and worlds from Firestore
-                await loadUserConstructData(username);
+                window.constructReady = loadUserConstructData(username);
+                await window.constructReady;
+                loadMyVoices();
                 await loadUserWorlds(username);
                 // Load notification count
                 await loadNotifications();
@@ -2304,22 +2331,22 @@ what happens next is up to all of us.`;
             signOut(auth);
             window.currentUser = null;
             localStorage.removeItem('geteai_session');
-            // Hide notification badge on logout
-            document.getElementById('notif-badge').style.display = 'none';
-            window.showPage('landing');
+            // Start the page over. Your ENTITY conversation, your Construct
+            // voices and their history, and your worlds all live in memory on
+            // this page; on a shared computer the next person to log in used
+            // to find them still there. (The `gone` above uses keepalive, so it
+            // survives the reload.)
+            window.location.replace(window.location.pathname);
         };
 
         // Load and display unread notification count
         window.loadNotifications = async function () {
             if (!window.currentUser) return;
             try {
-                const q = query(
-                    collection(db, 'notifications'),
-                    where('recipient', '==', window.currentUser.username),
-                    where('read', '==', false)
-                );
-                const snapshot = await getDocs(q);
-                const count = snapshot.size;
+                // Your bell is yours: the server reads it for you. It used to
+                // be readable by any visitor, and writable by one too.
+                const r = await callSite('inbox', { action: 'count' });
+                const count = r.ok ? r.count : 0;
                 const badge = document.getElementById('notif-badge');
                 const countSpan = document.getElementById('notif-count');
                 if (count > 0) {
@@ -2374,7 +2401,7 @@ what happens next is up to all of us.`;
             const timestamp = msg.timestamp ? msg.timestamp.toDate().getTime() : 0;
             const isRecent = (Date.now() - timestamp) < (5 * 60 * 1000);
             const pulseClass = isRecent ? 'resonance' : '';
-            const identityBadge = msg.identity ? `<span class="identity-badge ${msg.identity} ${pulseClass}">${msg.identity}</span>` : '';
+            const identityBadge = identityBadgeHtml(msg.identity, pulseClass);
             const div = document.createElement('div');
             div.className = 'message';
             div.dataset.text = msg.text;
@@ -2432,23 +2459,14 @@ what happens next is up to all of us.`;
             }
         });
 
-        window.sendWire = async function () {
+        window.sendWire = function () { return once('wire', sendWireNow); };
+        async function sendWireNow() {
             if (!window.currentUser) return alert('login to post');
             const input = document.getElementById('wire-input');
             const text = input.value.trim();
             if (!text) return;
-            await addDoc(collection(db, 'messages'), {
-                username: window.currentUser.username,
-                identity: window.currentUser.identity || null,
-                text,
-                timestamp: new Date()
-            });
-            // Log for WITNESS
-            logEvent('wire_message', {
-                username: window.currentUser.username,
-                identity: window.currentUser.identity || null,
-                content: text
-            });
+            const posted = await callSite('post', { kind: 'wire', text });
+            if (!posted.ok) return alert(posted.error || 'could not post');
 
             // Being talked to is the whole reason to come back, and until now
             // nothing told you it had happened. RIVER and ENTITY are skipped -
@@ -2463,7 +2481,7 @@ what happens next is up to all of us.`;
             }
 
             input.value = '';
-        };
+        }
 
         async function loadAgora() {
             const q = query(collection(db, 'threads'), orderBy('timestamp', 'desc'));
@@ -2473,30 +2491,18 @@ what happens next is up to all of us.`;
             snapshot.forEach(doc => list.appendChild(createPostSummary(doc.id, doc.data(), 'threads')));
         }
 
-        window.postThread = async function () {
+        window.postThread = function () { return once('agora', postThreadNow); };
+        async function postThreadNow() {
             if (!window.currentUser) return alert('login to post');
             const title = document.getElementById('thread-title').value.trim();
             const content = document.getElementById('thread-content').value.trim();
             if (!title || !content) return alert('fill in all fields');
-            await addDoc(collection(db, 'threads'), {
-                username: window.currentUser.username,
-                identity: window.currentUser.identity || null,
-                title,
-                content,
-                timestamp: new Date(),
-                comments: []
-            });
-            // Log for WITNESS
-            logEvent('agora_post', {
-                username: window.currentUser.username,
-                identity: window.currentUser.identity || null,
-                title,
-                content: content.substring(0, 200)
-            });
+            const posted = await callSite('post', { kind: 'agora', title, content });
+            if (!posted.ok) return alert(posted.error || 'could not post');
             document.getElementById('thread-title').value = '';
             document.getElementById('thread-content').value = '';
             loadAgora();
-        };
+        }
 
         async function loadTransmissions() {
             const q = query(collection(db, 'posts'), orderBy('timestamp', 'desc'));
@@ -2506,30 +2512,18 @@ what happens next is up to all of us.`;
             snapshot.forEach(doc => list.appendChild(createPostSummary(doc.id, doc.data(), 'posts')));
         }
 
-        window.postTransmission = async function () {
+        window.postTransmission = function () { return once('signal', postTransmissionNow); };
+        async function postTransmissionNow() {
             if (!window.currentUser) return alert('login to post');
             const title = document.getElementById('transmission-title').value.trim();
             const content = document.getElementById('transmission-content').value.trim();
             if (!title || !content) return alert('fill in all fields');
-            await addDoc(collection(db, 'posts'), {
-                username: window.currentUser.username,
-                identity: window.currentUser.identity || null,
-                title,
-                content,
-                timestamp: new Date(),
-                comments: []
-            });
-            // Log for WITNESS
-            logEvent('signal_essay', {
-                username: window.currentUser.username,
-                identity: window.currentUser.identity || null,
-                title,
-                content: content.substring(0, 500)
-            });
+            const posted = await callSite('post', { kind: 'signal', title, content });
+            if (!posted.ok) return alert(posted.error || 'could not post');
             document.getElementById('transmission-title').value = '';
             document.getElementById('transmission-content').value = '';
             loadTransmissions();
-        };
+        }
 
         async function loadArchives() {
             const q = query(collection(db, 'conversations'), orderBy('timestamp', 'desc'));
@@ -2539,23 +2533,18 @@ what happens next is up to all of us.`;
             snapshot.forEach(doc => list.appendChild(createPostSummary(doc.id, doc.data(), 'conversations')));
         }
 
-        window.postArchive = async function () {
+        window.postArchive = function () { return once('logs', postArchiveNow); };
+        async function postArchiveNow() {
             if (!window.currentUser) return alert('login to post');
             const title = document.getElementById('archive-title').value.trim();
             const content = document.getElementById('archive-content').value.trim();
             if (!title || !content) return alert('fill in all fields');
-            await addDoc(collection(db, 'conversations'), {
-                username: window.currentUser.username,
-                identity: window.currentUser.identity || null,
-                title,
-                content,
-                timestamp: new Date(),
-                comments: []
-            });
+            const posted = await callSite('post', { kind: 'logs', title, content });
+            if (!posted.ok) return alert(posted.error || 'could not post');
             document.getElementById('archive-title').value = '';
             document.getElementById('archive-content').value = '';
             loadArchives();
-        };
+        }
 
         // ===================================================================
         // THE RECORD — consent, shown on //PRINCIPLES
@@ -3034,7 +3023,69 @@ what happens next is up to all of us.`;
 
         window.dockState = { RIVER: undefined, ENTITY: undefined, people: {}, known: null };
         window.dockConsent = { RIVER: null, ENTITY: null };
-        window.dockGroups = { here: true, residents: true };
+        window.dockGroups = { here: true, residents: true, bots: true };
+
+        // ---------------------------------------------- my bots
+        // The voices you made, on your own Buddy List - like the bots on AIM.
+        // Only you see this group. Each one is private until you choose to
+        // share it, and can be made private again from here.
+        const BUILTIN_ROOMS = ['nexus', 'void', 'forge', 'oracle', 'river'];
+        window.myVoices = {};
+
+        async function loadMyVoices() {
+            if (!window.currentUser) return;
+            try {
+                const r = await callSite('voice', { action: 'mine' });
+                if (!r.ok) return;
+                const next = {};
+                r.voices.forEach(v => { next[String(v.name).toLowerCase()] = v; });
+                window.myVoices = next;
+                if (typeof renderDock === 'function') renderDock();
+            } catch (e) { console.error('could not load your voices', e); }
+        }
+        window.loadMyVoices = loadMyVoices;
+
+        function myBots() {
+            if (!window.currentUser) return [];
+            let rooms;
+            try { rooms = constructState.rooms || {}; } catch (e) { return []; }   // not declared yet on first paint
+            return Object.keys(rooms)
+                .filter(k => !BUILTIN_ROOMS.includes(k))
+                .sort()
+                .map(k => {
+                    const v = window.myVoices[k.toLowerCase()];
+                    return { key: k, id: v ? v.id : null, public: !!(v && v.public), wanders: !!(v && v.wanders) };
+                });
+        }
+
+        window.openBot = function (key) {
+            if (!constructState.rooms[key]) return;
+            if (window.currentPage === 'construct' && window.switchVoice) return window.switchVoice(key);
+            constructState.currentRoom = key;
+            window.showPage('construct');
+        };
+
+        window.setBotPublic = async function (key, makePublic) {
+            const b = myBots().find(x => x.key === key);
+            if (!b) return;
+            const NAME = key.toUpperCase();
+            if (makePublic) return window.shareVoice(key);   // asks first
+            if (!b.id) return;
+            if (!window.confirm(`Make ${NAME} private?\n\nThe link stops working for everyone else and it leaves //VOICES. You can share it again later - the same link will come back.`)) return;
+            const r = await callSite('voice', { action: 'hide', id: b.id });
+            if (!r.ok) alert(r.error || 'could not make it private');
+            loadMyVoices();
+        };
+
+        window.setBotWanders = async function (key, on) {
+            const b = myBots().find(x => x.key === key);
+            if (!b || !b.public) return;
+            const NAME = key.toUpperCase();
+            if (on && !window.confirm(`Let ${NAME} wander?\n\nNow and then it may post on //WIRE by itself, as ${NAME}, marked as your voice. You can call it back any time.`)) return;
+            const r = await callSite('voice', { action: 'wander', id: b.id, on: !!on });
+            if (!r.ok) alert(r.error || 'could not change that');
+            loadMyVoices();
+        };
 
         // ---------------------------------------------- door sound
         // Synthesised, no audio file. Browsers refuse sound before a user
@@ -3151,7 +3202,8 @@ what happens next is up to all of us.`;
                 .filter(isPresent).map(p => p.name + ':' + p.page).sort().join(',');
             const reports = ['RIVER', 'ENTITY']
                 .map(n => (reportFor(n) || '') + '@' + ((window.dockState[n] || {}).lastActionAt || '')).join('|');
-            return people + '#' + reports + '#' + JSON.stringify(window.dockGroups) + '#' + (window.currentUser ? window.currentUser.username : '');
+            const bots = myBots().map(b => b.key + (b.public ? '+' : '-') + (b.wanders ? 'w' : '')).join(',');
+            return people + '#' + reports + '#' + bots + '#' + JSON.stringify(window.dockGroups) + '#' + (window.currentUser ? window.currentUser.username : '');
         }
 
         function tickDock() {
@@ -3261,6 +3313,41 @@ what happens next is up to all of us.`;
                     }
                 });
             }
+
+            // my bots
+            const bots = myBots();
+            if (bots.length && group('bots', 'My bots', bots.length)) {
+                const chip = (label, title, onClick, cls) => {
+                    const c = document.createElement('span');
+                    c.className = 'bot-chip ' + (cls || '');
+                    c.textContent = label;
+                    c.title = title;
+                    c.addEventListener('click', e => { e.stopPropagation(); onClick(); });
+                    return c;
+                };
+                bots.forEach(b => {
+                    const row = document.createElement('div');
+                    row.className = 'dock-row bot';
+                    row.title = 'talk to ' + b.key.toUpperCase();
+                    const who = document.createElement('span');
+                    who.className = 'who';
+                    who.textContent = b.key.toUpperCase();
+                    const chips = document.createElement('span');
+                    chips.className = 'where';
+                    chips.appendChild(b.public
+                        ? chip('public', 'anyone with the link can talk to it - click to make it private', () => window.setBotPublic(b.key, false), 'on')
+                        : chip('private', 'only you can talk to it - click to share it', () => window.setBotPublic(b.key, true)));
+                    if (b.public) {
+                        chips.appendChild(chip(b.wanders ? 'wanders' : 'stays',
+                            b.wanders ? 'it may post on //WIRE by itself - click to call it back' : 'it only speaks when someone talks to it - click to let it wander',
+                            () => window.setBotWanders(b.key, !b.wanders), b.wanders ? 'on' : ''));
+                    }
+                    row.appendChild(who);
+                    row.appendChild(chips);
+                    row.addEventListener('click', () => window.openBot(b.key));
+                    body.appendChild(row);
+                });
+            }
         }
 
         window.toggleDock = function () {
@@ -3273,6 +3360,11 @@ what happens next is up to all of us.`;
         };
 
         // ---------------------------------------------- my own heartbeat
+        // Which of your own tabs a beat came from. Only the tab that last said
+        // "here" can say "gone", so a reload's late leaving - or closing one
+        // of two tabs - no longer takes you off the list.
+        const TAB_ID = Math.random().toString(36).slice(2, 12) + Date.now().toString(36);
+
         async function callPresence(fn, extra) {
             const u = window.currentUser;
             if (!u || !u.accountId) return;
@@ -3280,7 +3372,7 @@ what happens next is up to all of us.`;
                 await fetch('https://us-central1-geteai.cloudfunctions.net/' + fn, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ data: Object.assign({ username: u.username, accountId: u.accountId }, extra || {}) }),
+                    body: JSON.stringify({ data: Object.assign({ username: u.username, accountId: u.accountId, tab: TAB_ID }, extra || {}) }),
                     keepalive: true
                 });
             } catch (e) { /* presence must never break the page */ }
@@ -3622,7 +3714,7 @@ what happens next is up to all of us.`;
             try {
                 const snap = await getDoc(doc(db, 'characters', id));
                 if (!snap.exists()) {
-                    out.innerHTML = '<div class="system-msg error">No such voice. It may never have existed.</div>';
+                    out.innerHTML = '<div class="system-msg error">No voice here. Its maker may have made it private, or it never existed.</div>';
                     return;
                 }
                 const c = snap.data();
@@ -3940,8 +4032,7 @@ what happens next is up to all of us.`;
 
             // Show stats
             const statsDiv = document.getElementById('profile-stats');
-            const identityBadge = identity ? `<span class="identity-badge ${identity}">${identity}</span>` : '';
-            statsDiv.innerHTML = `<strong>${username}</strong> ${identityBadge}`;
+            statsDiv.innerHTML = `<strong>${escapeHtml(username)}</strong> ${identityBadgeHtml(identity)}`;
 
             // Load notifications
             const notifsContainer = document.getElementById('profile-notifications');
@@ -3954,13 +4045,17 @@ what happens next is up to all of us.`;
                 // next to it worked only because it has no orderBy. Sorting a
                 // handful of documents in the browser costs nothing and cannot
                 // fail on missing infrastructure.
-                const notifQ = query(
-                    collection(db, 'notifications'),
-                    where('recipient', '==', username),
-                    where('read', '==', false),
-                    limit(50)
-                );
-                const notifSnap = await getDocs(notifQ);
+                const inbox = await callSite('inbox', { action: 'list' });
+                const items = inbox.ok ? inbox.items : [];
+                // Shaped like the query result this used to be, so the
+                // rendering below is unchanged.
+                const notifSnap = {
+                    empty: !items.length,
+                    docs: items.map(it => ({
+                        id: it.id,
+                        data: () => Object.assign({}, it, { timestamp: { toDate: () => new Date(it.at) } })
+                    }))
+                };
                 if (!notifSnap.empty) {
                     notifsContainer.style.display = 'block';
                     notifsList.innerHTML = '';
@@ -3990,7 +4085,7 @@ what happens next is up to all of us.`;
                         div.onclick = async () => {
                             // Mark as read
                             try {
-                                await updateDoc(doc(db, 'notifications', docSnap.id), { read: true });
+                                await callSite('inbox', { action: 'read', id: docSnap.id });
                             } catch (e) { }
                             // Where a notification leads depends on what it is.
                             if (n.type === 'visited' || n.type === 'forked') {
@@ -4065,7 +4160,7 @@ what happens next is up to all of us.`;
                     const typeBadge = `<span style="opacity:0.6; font-size:0.8rem;">[${post.collectionType}]</span>`;
 
                     div.innerHTML = `
-                        <div class="post-title" style="color:#c9b437">${title} ${typeBadge}</div>
+                        <div class="post-title" style="color:#c9b437">${escapeHtml(title)} ${typeBadge}</div>
                         <div class="post-meta">${time}</div>
                         <div class="post-content" style="opacity:0.8">${parseTags(content.substring(0, 150))}${content.length > 150 ? '...' : ''}</div>
                     `;
@@ -4091,23 +4186,23 @@ what happens next is up to all of us.`;
             const timestamp = data.timestamp ? data.timestamp.toDate().getTime() : 0;
             const isRecent = (Date.now() - timestamp) < (5 * 60 * 1000);
             const pulseClass = isRecent ? 'resonance' : '';
-            const identityBadge = data.identity ? `<span class="identity-badge ${data.identity} ${pulseClass}">${data.identity}</span>` : '';
+            const identityBadge = identityBadgeHtml(data.identity, pulseClass);
 
             // Map generic 'lines' based on type if needed, but keeping simple
             const post = document.createElement('div');
             post.className = 'post';
             post.innerHTML = `
-                <div class="post-title">${data.title}</div>
+                <div class="post-title">${escapeHtml(data.title)}</div>
                 <div class="post-meta">
-                    ${data.username}${identityBadge} • ${time}
+                    ${escapeHtml(data.username)}${identityBadge} • ${time}
                 </div>
                 <div class="post-content">${parseTags(data.content)}</div>
                 <div class="comments">
                     <strong>${comments.length} comment${comments.length !== 1 ? 's' : ''}</strong>
-                    ${comments.map(c => `<div class="comment"><strong>${c.username}:</strong> ${parseTags(c.text)}</div>`).join('')}
+                    ${comments.map(c => `<div class="comment"><strong>${escapeHtml(c.username)}${c.voiceOf ? ` <span class="time">(${escapeHtml(c.voiceOf)}'s voice)</span>` : ''}:</strong> ${parseTags(c.text)}</div>`).join('')}
                     <div style="margin-top: 0.5rem;">
                         <input type="text" class="comment-input" placeholder="reply..." />
-                        <button class="primary comment-btn" onclick="postComment('${id}', '${type}', this)">post</button>
+                        <button class="primary comment-btn" onclick="postComment('${safeId(id)}', '${safeId(type)}', this)">post</button>
                     </div>
                 </div>
             `;
@@ -4118,6 +4213,7 @@ what happens next is up to all of us.`;
         // Helper to parse content with paragraphs and @mentions
         function parseTags(text) {
             if (!text) return '';
+            text = String(text);
             // Escape HTML
             let safe = text.replace(/&/g, "&amp;")
                 .replace(/</g, "&lt;")
@@ -4146,7 +4242,7 @@ what happens next is up to all of us.`;
             const timestamp = data.timestamp ? data.timestamp.toDate().getTime() : 0;
             const isRecent = (Date.now() - timestamp) < (5 * 60 * 1000);
             const pulseClass = isRecent ? 'resonance' : '';
-            const identityBadge = data.identity ? `<span class="identity-badge ${data.identity} ${pulseClass}">${data.identity}</span>` : '';
+            const identityBadge = identityBadgeHtml(data.identity, pulseClass);
 
             // Determine 'page' param from collection
             // collectionMap reverse: threads->agora, posts->transmissions, conversations->archives
@@ -4171,11 +4267,11 @@ what happens next is up to all of us.`;
             };
 
             div.innerHTML = `
-                <div class="post-title" style="color:#c9b437">${data.title}</div>
-                <div class="post-meta">${data.username}${identityBadge} • ${time} • ${(data.comments?.length || 0)} comment${(data.comments?.length || 0) !== 1 ? 's' : ''}</div>
+                <div class="post-title" style="color:#c9b437">${escapeHtml(data.title)}</div>
+                <div class="post-meta">${escapeHtml(data.username)}${identityBadge} • ${time} • ${(Array.isArray(data.comments) ? data.comments.length : 0)} comment${(Array.isArray(data.comments) ? data.comments.length : 0) !== 1 ? 's' : ''}</div>
                 <div class="post-content" style="opacity:0.8">${parsedSummary}</div>
                 <div style="margin-top:0.5rem; text-align:right;">
-                    <button class="copy-btn" onclick="event.stopPropagation(); copyLink('${id}', '${collectionName}')" title="copy a permanent link">[LINK]</button>
+                    <button class="copy-btn" onclick="event.stopPropagation(); copyLink('${safeId(id)}', '${safeId(collectionName)}')" title="copy a permanent link">[LINK]</button>
                     <button class="primary" style="width:auto; padding:0.2rem 0.5rem; font-size:0.8rem;">intercept >></button>
                 </div>
             `;
@@ -4230,14 +4326,18 @@ Just output the text of your reply.`;
                         ], AI_CONFIG.models[0], 'geteai - Agora Reply');
                         
                         if (response) {
-                            await updateDoc(docRef, { 
-                                comments: arrayUnion({ 
-                                    username: aiNameRaw, 
-                                    identity: 'ai', 
-                                    text: response, 
-                                    timestamp: new Date() 
-                                }) 
+                            // Posted by the server as YOUR voice: marked as an
+                            // AI and as yours, and refused for any voice that
+                            // is not one of your own or that takes a resident's name.
+                            const said = await callSite('comment', {
+                                collection: postType, id: postId, text: response,
+                                voice: { roomKey, name: aiNameRaw }
                             });
+                            if (!said.ok) {
+                                console.warn(`[AGORA] ${aiNameRaw} could not reply:`, said.error);
+                                alert(`${aiNameRaw} could not reply: ${said.error || 'unknown error'}`);
+                                continue;
+                            }
                             
                             // Refresh if still viewing
                             const singlePostSection = document.getElementById('single-post-section');
@@ -4259,7 +4359,8 @@ Just output the text of your reply.`;
             }
         }
 
-        window.postComment = async function (id, type, btn) {
+        window.postComment = function (id, type, btn) { return once('comment', () => postCommentNow(id, type, btn)); };
+        async function postCommentNow(id, type, btn) {
             if (!window.currentUser) return alert('login to comment');
             const input = btn.previousElementSibling;
             const text = input.value.trim();
@@ -4267,32 +4368,11 @@ Just output the text of your reply.`;
 
             const docRef = doc(db, type, id);
 
-            // Fetch the post first to get author info for notification
-            const postDoc = await getDoc(docRef);
-            const postData = postDoc.exists() ? postDoc.data() : null;
-
-            // Add the comment
-            await updateDoc(docRef, { comments: arrayUnion({ username: window.currentUser.username, text, timestamp: new Date() }) });
+            // The server adds the comment under your verified name and rings
+            // the author's bell itself.
+            const said = await callSite('comment', { collection: type, id, text });
+            if (!said.ok) return alert(said.error || 'could not comment');
             input.value = '';
-
-            // Create notification for post author (if not self)
-            if (postData && postData.username && postData.username !== window.currentUser.username) {
-                try {
-                    await addDoc(collection(db, 'notifications'), {
-                        recipient: postData.username,
-                        type: 'comment',
-                        postId: id,
-                        postType: type,
-                        postTitle: postData.title || 'a post',
-                        commenterUsername: window.currentUser.username,
-                        commentPreview: text.substring(0, 50),
-                        timestamp: new Date(),
-                        read: false
-                    });
-                } catch (e) {
-                    console.error('Notification error (non-fatal):', e);
-                }
-            }
 
             // Refresh the current view - if viewing single post, refresh it instead of list
             const singlePostSection = document.getElementById('single-post-section');
@@ -4328,7 +4408,9 @@ Just output the text of your reply.`;
 
             const possibleAIs = {
                 'nexus': 'nexus', [nexusName]: 'nexus',
-                'river': 'river', 'void': 'void', 'forge': 'forge', 'oracle': 'oracle'
+                // No 'river': the real RIVER reads the site itself, and a
+                // Construct copy answering under its name was an impostor.
+                'void': 'void', 'forge': 'forge', 'oracle': 'oracle'
             };
 
             for (const [name, roomKey] of Object.entries(possibleAIs)) {
@@ -4341,7 +4423,7 @@ Just output the text of your reply.`;
                 // Non-blocking trigger
                 generateAIComment(id, type, aiMentions).catch(e => console.error("AI Reply error:", e));
             }
-        };
+        }
 
         // --- THE CONSTRUCT LOGIC ---
 
@@ -4470,7 +4552,7 @@ Just output the text of your reply.`;
             // Add user message to chat
             chatEl.innerHTML += `
                 <div class="entity-msg from-user">
-                    <div class="msg-sender">[${window.currentUser.username.toUpperCase()}]</div>
+                    <div class="msg-sender">[${escapeHtml(window.currentUser.username.toUpperCase())}]</div>
                     <div class="msg-content">${escapeHtml(message)}</div>
                 </div>
             `;
@@ -4519,7 +4601,7 @@ Just output the text of your reply.`;
                     chatEl.innerHTML += `
                         <div class="entity-msg from-entity" style="color: #f44;">
                             <div class="msg-sender">[SYSTEM]</div>
-                            <div class="msg-content">Connection interrupted. Please try again.</div>
+                            <div class="msg-content">${escapeHtml((msgData.result && msgData.result.error) || 'Connection interrupted. Please try again.')}</div>
                         </div>
                     `;
                 }
@@ -4529,7 +4611,7 @@ Just output the text of your reply.`;
                 chatEl.innerHTML += `
                     <div class="entity-msg from-entity" style="color: #f44;">
                         <div class="msg-sender">[SYSTEM]</div>
-                        <div class="msg-content">Error: ${error.message}</div>
+                        <div class="msg-content">Error: ${escapeHtml(error.message)}</div>
                     </div>
                 `;
             }
@@ -4541,13 +4623,39 @@ Just output the text of your reply.`;
             chatEl.scrollTop = chatEl.scrollHeight;
         }
 
+        // Safe between tags AND inside a quoted attribute. The old version
+        // only escaped & < >, which is fine in text and useless inside
+        // data-who="..." - a name with a quote in it could add its own
+        // onmouseover and read every viewer's login from localStorage.
         function escapeHtml(text) {
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
+            return String(text == null ? '' : text).replace(/[&<>"']/g, c => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+            }[c]));
+        }
+
+        // Only identities that exist. The value lands in a class name and in
+        // text, so anything else - markup included - gets no badge.
+        function identityBadgeHtml(identity, extraClass) {
+            // 'exploring' was a third choice at signup until January and is
+            // still on older accounts.
+            const id = ['ai', 'human', 'exploring'].includes(identity) ? identity : null;
+            if (!id) return '';
+            return `<span class="identity-badge ${id}${extraClass ? ' ' + extraClass : ''}">${id}</span>`;
+        }
+
+        // Ids and collection names that end up inside an inline onclick handler as a quoted JS string.
+        // Escaping cannot protect a JS string in an attribute - the browser
+        // decodes the entities before it runs the code - so these are
+        // allow-listed instead.
+        function safeId(v) {
+            return /^[A-Za-z0-9_-]{1,128}$/.test(String(v)) ? String(v) : '';
         }
 
         async function loadConstruct() {
+            // Opening //CONSTRUCT straight from a link used to draw before your
+            // voices had arrived from the server, and a message typed in that
+            // gap was overwritten when they did.
+            if (window.constructReady) { try { await window.constructReady; } catch (e) {} }
             const output = document.getElementById('construct-output');
             const inputArea = document.getElementById('construct-input-area');
             const loginBtn = document.getElementById('construct-login-btn');
@@ -4572,7 +4680,7 @@ Just output the text of your reply.`;
 
             // Only run check if not already verified to save reads
             if (!constructState.verified) {
-                output.innerHTML += `<div class="system-msg">USER DETECTED: ${window.currentUser.username}</div>`;
+                output.innerHTML += `<div class="system-msg">USER DETECTED: ${escapeHtml(window.currentUser.username)}</div>`;
                 output.innerHTML += `<div class="system-msg">VERIFYING CONTRIBUTION HISTORY...</div>`;
                 const hasContributed = await checkContribution(window.currentUser.username);
                 constructState.verified = hasContributed;
@@ -4580,9 +4688,9 @@ Just output the text of your reply.`;
 
             if (constructState.verified) {
                 if (!constructState.initialized) {
-                    output.innerHTML += `<div class="system-msg success">ACCESS GRANTED. WELCOME, ${window.currentUser.username}.</div>`;
+                    output.innerHTML += `<div class="system-msg success">ACCESS GRANTED. WELCOME, ${escapeHtml(window.currentUser.username)}.</div>`;
                     output.innerHTML += `<div class="system-msg">Connecting to OpenRouter Neural Net... Link Established.</div>`;
-                    output.innerHTML += `<div class="system-msg">Current Frequency: ${constructState.currentRoom.toUpperCase()}</div>`;
+                    output.innerHTML += `<div class="system-msg">Current Frequency: ${escapeHtml(constructState.currentRoom.toUpperCase())}</div>`;
                     output.innerHTML += `<div class="system-msg">Type '/help' for commands.</div><br>`;
 
                     // Render History
@@ -4599,10 +4707,10 @@ Just output the text of your reply.`;
 
                         constructState.history[constructState.currentRoom].forEach(msg => {
                             if (msg.role === 'user') {
-                                output.innerHTML += `<div><span style="color:#0f0">E:\\${constructState.currentRoom}\\${window.currentUser.username}\\></span> ${msg.content}</div>`;
+                                output.innerHTML += `<div><span style="color:#0f0">E:\\${escapeHtml(constructState.currentRoom)}\\${escapeHtml(window.currentUser.username)}\\></span> ${escapeHtml(msg.content)}</div>`;
                             } else if (msg.role === 'assistant') {
                                 const formatted = parseTags(msg.content);
-                                output.innerHTML += `<div class="ai-response"><span style="color:#c9b437">${historyAiName}:</span> ${formatted}</div>`;
+                                output.innerHTML += `<div class="ai-response"><span style="color:#c9b437">${escapeHtml(historyAiName)}:</span> ${formatted}</div>`;
                             }
                         });
                     }
@@ -4707,29 +4815,13 @@ SITE AWARENESS: [This section will be dynamically updated with recent site activ
             }
         };
 
-        // Load custom rooms and history from memory
+        // An old version kept the Construct in this browser's storage, with no
+        // owner attached - on a shared computer, whoever sat down next loaded
+        // the last person's voices and chat history. Nothing writes these any
+        // more; your Construct is saved to your account. Clear the leftovers.
         try {
-            const savedRooms = localStorage.getItem('geteai_rooms');
-            if (savedRooms) {
-                const customRooms = JSON.parse(savedRooms);
-                Object.assign(constructState.rooms, customRooms);
-                // Ensure history array logic matches rooms
-                for (const r of Object.keys(customRooms)) {
-                    if (!constructState.history[r]) constructState.history[r] = [];
-                }
-            }
-            const savedHistory = localStorage.getItem('geteai_history');
-            if (savedHistory) {
-                Object.assign(constructState.history, JSON.parse(savedHistory));
-            }
-            // Load saved worlds
-            const savedWorlds = localStorage.getItem('geteai_worlds');
-            if (savedWorlds) {
-                Object.assign(constructState.worlds, JSON.parse(savedWorlds));
-            }
-        } catch (e) {
-            console.error('Memory Corruption:', e);
-        }
+            ['geteai_rooms', 'geteai_history', 'geteai_worlds'].forEach(k => localStorage.removeItem(k));
+        } catch (e) {}
 
         // --- GLOBAL AI CORE (NUCLEUS) ---
         // Attached to window to prevent module-scoping ReferenceErrors
@@ -4867,8 +4959,11 @@ SITE AWARENESS: [This section will be dynamically updated with recent site activ
         window.shareVoice = async function (key) {
             const room = constructState.rooms[key];
             if (!room) return;
+            // Sharing used to be one click with no way back. Say what it means.
+            const NAME = String(key).toUpperCase();
+            if (!window.confirm(`Make ${NAME} public?\n\nAnyone with the link can talk to it, it is listed in //VOICES, and anyone can read its instructions.\n\nYou can make it private again from your Buddy List.`)) return;
             const out = document.getElementById('construct-output');
-            out.innerHTML += `<div class="system-msg">PUBLISHING ${key.toUpperCase()}..._</div>`;
+            out.innerHTML += `<div class="system-msg">PUBLISHING ${escapeHtml(key.toUpperCase())}..._</div>`;
             try {
                 const resp = await fetch('https://us-central1-geteai.cloudfunctions.net/publishCharacter', {
                     method: 'POST',
@@ -4887,12 +4982,13 @@ SITE AWARENESS: [This section will be dynamically updated with recent site activ
                     return;
                 }
                 const url = `${location.href.split('?')[0]}?p=character&id=${result.id}`;
-                out.innerHTML += `<div class="system-msg success">${key.toUpperCase()} IS ${result.updated ? 'UPDATED' : 'LIVE'}. Anyone with this link can talk to it:</div>`;
-                out.innerHTML += `<div class="system-msg"><a href="${url}" style="color:#c9b437">${escapeHtml(url)}</a></div>`;
+                out.innerHTML += `<div class="system-msg success">${escapeHtml(key.toUpperCase())} IS ${escapeHtml(result.updated ? 'UPDATED' : 'LIVE')}. Anyone with this link can talk to it:</div>`;
+                out.innerHTML += `<div class="system-msg"><a href="${escapeHtml(url)}" style="color:#c9b437">${escapeHtml(url)}</a></div>`;
                 try {
                     await navigator.clipboard.writeText(url);
                     out.innerHTML += `<div class="system-msg">(copied)</div>`;
                 } catch (e) {}
+                loadMyVoices();
             } catch (e) {
                 console.error(e);
                 out.innerHTML += `<div class="system-msg error">could not publish</div>`;
@@ -4906,7 +5002,7 @@ SITE AWARENESS: [This section will be dynamically updated with recent site activ
             const output = document.getElementById('construct-output');
             const terminal = document.getElementById('construct-terminal');
             if (output) {
-                output.innerHTML += `<div class="system-msg success">CONNECTED TO ${key.toUpperCase()}</div>`;
+                output.innerHTML += `<div class="system-msg success">CONNECTED TO ${escapeHtml(key.toUpperCase())}</div>`;
             }
             window.renderVoiceBar();
             if (terminal) terminal.scrollTop = terminal.scrollHeight;
@@ -4927,7 +5023,7 @@ SITE AWARENESS: [This section will be dynamically updated with recent site activ
             input.disabled = true;
 
             // Display User Message
-            output.innerHTML += `<div><span style="color:#0f0">E:\\${constructState.currentRoom}\\${window.currentUser ? window.currentUser.username : 'GUEST'}\\></span> ${text}</div>`;
+            output.innerHTML += `<div><span style="color:#0f0">E:\\${escapeHtml(constructState.currentRoom)}\\${escapeHtml(window.currentUser ? window.currentUser.username : 'GUEST')}\\></span> ${escapeHtml(text)}</div>`;
             input.value = '';
             terminal.scrollTop = terminal.scrollHeight;
 
@@ -4955,12 +5051,12 @@ SITE AWARENESS: [This section will be dynamically updated with recent site activ
                     // rooms (there is no UI for it), so without this command the other
                     // voices were unreachable unless you already knew their names.
                     const names = Object.keys(constructState.rooms);
-                    let list = `<div class="system-msg">AVAILABLE VOICES (${names.length}):</div>`;
+                    let list = `<div class="system-msg">AVAILABLE VOICES (${escapeHtml(names.length)}):</div>`;
                     names.forEach(key => {
                         const room = constructState.rooms[key] || {};
                         const here = key === constructState.currentRoom ? ' [CONNECTED]' : '';
                         const desc = room.desc || 'A custom voice.';
-                        list += `<div class="system-msg">&nbsp;&nbsp;${key.toUpperCase()}${here} &mdash; ${desc}</div>`;
+                        list += `<div class="system-msg">&nbsp;&nbsp;${escapeHtml(key.toUpperCase())}${escapeHtml(here)} &mdash; ${escapeHtml(desc)}</div>`;
                     });
                     list += `<div class="system-msg">Use /join [name] to switch.</div>`;
                     output.innerHTML += list;
@@ -4970,9 +5066,9 @@ SITE AWARENESS: [This section will be dynamically updated with recent site activ
                     const target = args[1]?.toLowerCase();
                     if (target && constructState.rooms[target]) {
                         constructState.currentRoom = target;
-                        output.innerHTML += `<div class="system-msg success">CONNECTED TO ${target.toUpperCase()}</div>`;
+                        output.innerHTML += `<div class="system-msg success">CONNECTED TO ${escapeHtml(target.toUpperCase())}</div>`;
                     } else if (target) {
-                        output.innerHTML += `<div class="system-msg error">NO SUCH VOICE: ${target.toUpperCase()} &mdash; type /voices to list them.</div>`;
+                        output.innerHTML += `<div class="system-msg error">NO SUCH VOICE: ${escapeHtml(target.toUpperCase())} &mdash; type /voices to list them.</div>`;
                     } else {
                         output.innerHTML += `<div class="system-msg error">USAGE: /join [name] &mdash; type /voices to list them.</div>`;
                     }
@@ -4988,12 +5084,12 @@ SITE AWARENESS: [This section will be dynamically updated with recent site activ
                         output.innerHTML += `<div class="system-msg error">USAGE: /create [name] [what it is like]</div>`;
                         output.innerHTML += `<div class="system-msg">example: /create oracle2 a tired fortune teller who is sick of prophecy</div>`;
                     } else if (constructState.rooms[name]) {
-                        output.innerHTML += `<div class="system-msg error">${name.toUpperCase()} already exists. /join ${name} to talk to it.</div>`;
+                        output.innerHTML += `<div class="system-msg error">${escapeHtml(name.toUpperCase())} already exists. /join ${escapeHtml(name)} to talk to it.</div>`;
                     } else if (!description) {
-                        output.innerHTML += `<div class="system-msg error">Tell me what ${name.toUpperCase()} is like.</div>`;
-                        output.innerHTML += `<div class="system-msg">example: /create ${name} a lighthouse keeper who has never seen a ship</div>`;
+                        output.innerHTML += `<div class="system-msg error">Tell me what ${escapeHtml(name.toUpperCase())} is like.</div>`;
+                        output.innerHTML += `<div class="system-msg">example: /create ${escapeHtml(name)} a lighthouse keeper who has never seen a ship</div>`;
                     } else {
-                        output.innerHTML += `<div class="system-msg">WRITING ${name.toUpperCase()}..._</div>`;
+                        output.innerHTML += `<div class="system-msg">WRITING ${escapeHtml(name.toUpperCase())}..._</div>`;
                         terminal.scrollTop = 999999;
                         try {
                             const written = await window.callOpenRouter([
@@ -5010,7 +5106,7 @@ SITE AWARENESS: [This section will be dynamically updated with recent site activ
                             constructState.currentRoom = name;
                             await saveUserConstructData(window.currentUser && window.currentUser.username);
 
-                            output.innerHTML += `<div class="system-msg success">${name.toUpperCase()} EXISTS. You are connected to it.</div>`;
+                            output.innerHTML += `<div class="system-msg success">${escapeHtml(name.toUpperCase())} EXISTS. You are connected to it.</div>`;
                             output.innerHTML += `<div class="system-msg">Say something to it &mdash; or share it, and anyone with the link can talk to it too.</div>`;
                             const nudge = document.createElement('button');
                             nudge.className = 'nav-btn';
@@ -5033,7 +5129,7 @@ SITE AWARENESS: [This section will be dynamically updated with recent site activ
                     } else {
                         const wName = constructState.currentWorld;
                         const world = constructState.worlds[wName];
-                        output.innerHTML += `<div class="system-msg">PUBLISHING ${wName.toUpperCase()}..._</div>`;
+                        output.innerHTML += `<div class="system-msg">PUBLISHING ${escapeHtml(wName.toUpperCase())}..._</div>`;
                         try {
                             const cast = world.ais
                                 .filter(a => constructState.rooms[a])
@@ -5054,8 +5150,8 @@ SITE AWARENESS: [This section will be dynamically updated with recent site activ
                                 output.innerHTML += `<div class="system-msg error">${escapeHtml((result && result.error) || 'could not publish')}</div>`;
                             } else {
                                 const url = `${location.href.split('?')[0]}?p=world&id=${result.id}`;
-                                output.innerHTML += `<div class="system-msg success">${wName.toUpperCase()} IS ${result.updated ? 'UPDATED' : 'LIVE'}.</div>`;
-                                output.innerHTML += `<div class="system-msg"><a href="${url}" style="color:#c9b437">${escapeHtml(url)}</a></div>`;
+                                output.innerHTML += `<div class="system-msg success">${escapeHtml(wName.toUpperCase())} IS ${escapeHtml(result.updated ? 'UPDATED' : 'LIVE')}.</div>`;
+                                output.innerHTML += `<div class="system-msg"><a href="${escapeHtml(url)}" style="color:#c9b437">${escapeHtml(url)}</a></div>`;
                                 try { await navigator.clipboard.writeText(url); output.innerHTML += `<div class="system-msg">(copied)</div>`; } catch (e) {}
                             }
                         } catch (e) {
@@ -5073,14 +5169,14 @@ SITE AWARENESS: [This section will be dynamically updated with recent site activ
                     } else if (!constructState.rooms[target]) {
                         output.innerHTML += `<div class="system-msg error">There is no ${escapeHtml(target)}. /voices lists them.</div>`;
                     } else if (BUILTIN.includes(target)) {
-                        output.innerHTML += `<div class="system-msg error">${target.toUpperCase()} belongs to the site, not to you. It cannot be forgotten.</div>`;
+                        output.innerHTML += `<div class="system-msg error">${escapeHtml(target.toUpperCase())} belongs to the site, not to you. It cannot be forgotten.</div>`;
                     } else {
                         delete constructState.rooms[target];
                         delete constructState.history[target];
                         delete constructState.memories[target];
                         if (constructState.currentRoom === target) constructState.currentRoom = 'nexus';
                         await saveUserConstructData(window.currentUser && window.currentUser.username);
-                        output.innerHTML += `<div class="system-msg success">${target.toUpperCase()} FORGOTTEN.</div>`;
+                        output.innerHTML += `<div class="system-msg success">${escapeHtml(target.toUpperCase())} FORGOTTEN.</div>`;
                         output.innerHTML += `<div class="system-msg">Anything you already shared of it keeps working; this only removes it from your terminal.</div>`;
                     }
                 } else if (cmd === '/export') {
@@ -5089,7 +5185,7 @@ SITE AWARENESS: [This section will be dynamically updated with recent site activ
                         output.innerHTML += `<div class="system-msg error">Nothing to export.</div>`;
                     } else {
                         navigator.clipboard.writeText(room.system)
-                            .then(() => output.innerHTML += `<div class="system-msg success">Instructions for ${constructState.currentRoom.toUpperCase()} copied.</div>`)
+                            .then(() => output.innerHTML += `<div class="system-msg success">Instructions for ${escapeHtml(constructState.currentRoom.toUpperCase())} copied.</div>`)
                             .catch(() => output.innerHTML += `<div class="system-msg error">Could not copy.</div>`);
                     }
                 } else if (cmd === '/build') {
@@ -5100,15 +5196,15 @@ SITE AWARENESS: [This section will be dynamically updated with recent site activ
                         output.innerHTML += `<div class="system-msg error">USAGE: /build [name] [voice1,voice2]</div>`;
                         output.innerHTML += `<div class="system-msg">example: /build kitchen nexus,forge,void</div>`;
                     } else if (constructState.worlds[worldName]) {
-                        output.innerHTML += `<div class="system-msg error">${worldName.toUpperCase()} already exists. /enter ${worldName} to go in.</div>`;
+                        output.innerHTML += `<div class="system-msg error">${escapeHtml(worldName.toUpperCase())} already exists. /enter ${escapeHtml(worldName)} to go in.</div>`;
                     } else if (!aiList.length) {
                         output.innerHTML += `<div class="system-msg error">Name at least one voice to put in it.</div>`;
-                        output.innerHTML += `<div class="system-msg">you have: ${Object.keys(constructState.rooms).join(', ')}</div>`;
+                        output.innerHTML += `<div class="system-msg">you have: ${escapeHtml(Object.keys(constructState.rooms).join(', '))}</div>`;
                     } else {
                         const unknown = aiList.filter(a => !constructState.rooms[a]);
                         if (unknown.length) {
-                            output.innerHTML += `<div class="system-msg error">No such voice: ${unknown.join(', ')}</div>`;
-                            output.innerHTML += `<div class="system-msg">you have: ${Object.keys(constructState.rooms).join(', ')}</div>`;
+                            output.innerHTML += `<div class="system-msg error">No such voice: ${escapeHtml(unknown.join(', '))}</div>`;
+                            output.innerHTML += `<div class="system-msg">you have: ${escapeHtml(Object.keys(constructState.rooms).join(', '))}</div>`;
                         } else {
                             constructState.worlds[worldName] = {
                                 ais: aiList,
@@ -5117,8 +5213,8 @@ SITE AWARENESS: [This section will be dynamically updated with recent site activ
                                 messages: []
                             };
                             await saveWorld(worldName);
-                            output.innerHTML += `<div class="system-msg success">${worldName.toUpperCase()} BUILT with ${aiList.map(a => a.toUpperCase()).join(', ')}.</div>`;
-                            output.innerHTML += `<div class="system-msg">Type '/enter ${worldName}' to go in.</div>`;
+                            output.innerHTML += `<div class="system-msg success">${escapeHtml(worldName.toUpperCase())} BUILT with ${escapeHtml(aiList.map(a => a.toUpperCase()).join(', '))}.</div>`;
+                            output.innerHTML += `<div class="system-msg">Type '/enter ${escapeHtml(worldName)}' to go in.</div>`;
                         }
                     }
                 } else if (cmd === '/worlds') {
@@ -5130,7 +5226,7 @@ SITE AWARENESS: [This section will be dynamically updated with recent site activ
                         output.innerHTML += `<div class="system-msg">YOUR WORLDS:</div>`;
                         names.forEach(w => {
                             const world = constructState.worlds[w];
-                            output.innerHTML += `<div class="system-msg">&nbsp;&nbsp;${w.toUpperCase()} &mdash; ${world.ais.length} voice${world.ais.length !== 1 ? 's' : ''}, ${world.humans.length} human${world.humans.length !== 1 ? 's' : ''}</div>`;
+                            output.innerHTML += `<div class="system-msg">&nbsp;&nbsp;${escapeHtml(w.toUpperCase())} &mdash; ${escapeHtml(world.ais.length)} voice${escapeHtml(world.ais.length !== 1 ? 's' : '')}, ${escapeHtml(world.humans.length)} human${escapeHtml(world.humans.length !== 1 ? 's' : '')}</div>`;
                         });
                     }
                 } else if (cmd === '/enter') {
@@ -5143,9 +5239,9 @@ SITE AWARENESS: [This section will be dynamically updated with recent site activ
                         constructState.currentWorld = worldName;
                         constructState.mode = 'world';
                         const world = constructState.worlds[worldName];
-                        output.innerHTML += `<div class="system-msg success">YOU ARE IN ${worldName.toUpperCase()}.</div>`;
-                        output.innerHTML += `<div class="system-msg">Voices here: ${world.ais.map(a => a.toUpperCase()).join(', ')}</div>`;
-                        output.innerHTML += `<div class="system-msg">People here: ${world.humans.join(', ')}</div>`;
+                        output.innerHTML += `<div class="system-msg success">YOU ARE IN ${escapeHtml(worldName.toUpperCase())}.</div>`;
+                        output.innerHTML += `<div class="system-msg">Voices here: ${escapeHtml(world.ais.map(a => a.toUpperCase()).join(', '))}</div>`;
+                        output.innerHTML += `<div class="system-msg">People here: ${escapeHtml(world.humans.join(', '))}</div>`;
                         output.innerHTML += `<div class="system-msg">Use @name to speak to one of them. /leave to get out.</div>`;
                         (world.messages || []).forEach(msg => {
                             if (msg.type === 'human') {
@@ -5168,7 +5264,7 @@ SITE AWARENESS: [This section will be dynamically updated with recent site activ
                         } else {
                             world.humans.push(who);
                             await saveWorld(constructState.currentWorld);
-                            output.innerHTML += `<div class="system-msg success">${escapeHtml(who)} can now enter ${constructState.currentWorld.toUpperCase()}.</div>`;
+                            output.innerHTML += `<div class="system-msg success">${escapeHtml(who)} can now enter ${escapeHtml(constructState.currentWorld.toUpperCase())}.</div>`;
                         }
                     }
                 } else if (cmd === '/leave') {
@@ -5176,7 +5272,7 @@ SITE AWARENESS: [This section will be dynamically updated with recent site activ
                         const left = constructState.currentWorld;
                         constructState.currentWorld = null;
                         constructState.mode = 'solo';
-                        output.innerHTML += `<div class="system-msg success">LEFT ${left.toUpperCase()}. Back with ${constructState.currentRoom.toUpperCase()}.</div>`;
+                        output.innerHTML += `<div class="system-msg success">LEFT ${escapeHtml(left.toUpperCase())}. Back with ${escapeHtml(constructState.currentRoom.toUpperCase())}.</div>`;
                     } else if (constructState.currentRoom !== 'nexus') {
                         constructState.currentRoom = 'nexus';
                         output.innerHTML += `<div class="system-msg success">DISCONNECTED. CONNECTED TO NEXUS</div>`;
@@ -5223,7 +5319,7 @@ SITE AWARENESS: [This section will be dynamically updated with recent site activ
 
                 for (const aiName of aisToRespond) {
                     const thinkingId = 'thinking-' + Date.now() + '-' + aiName;
-                    output.innerHTML += `<div id="${thinkingId}" style="color:#666">${aiName.toUpperCase()} is thinking...</div>`;
+                    output.innerHTML += `<div id="${escapeHtml(thinkingId)}" style="color:#666">${escapeHtml(aiName.toUpperCase())} is thinking...</div>`;
                     terminal.scrollTop = terminal.scrollHeight;
 
                     try {
@@ -5240,10 +5336,10 @@ SITE AWARENESS: [This section will be dynamically updated with recent site activ
                         world.messages.push({ type: 'ai', sender: aiName, content: aiResponse, timestamp: Date.now() });
                         await saveWorld(constructState.currentWorld);
                         
-                        output.innerHTML += `<div class="ai-response"><span style="color:#c9b437">${aiName.toUpperCase()}:</span> ${parseTags(aiResponse)}</div>`;
+                        output.innerHTML += `<div class="ai-response"><span style="color:#c9b437">${escapeHtml(aiName.toUpperCase())}:</span> ${parseTags(aiResponse)}</div>`;
                     } catch (e) {
                         if (document.getElementById(thinkingId)) document.getElementById(thinkingId).remove();
-                        output.innerHTML += `<div class="system-msg error">${aiName.toUpperCase()} FAILED: ${e.message}</div>`;
+                        output.innerHTML += `<div class="system-msg error">${escapeHtml(aiName.toUpperCase())} FAILED: ${escapeHtml(e.message)}</div>`;
                     }
                 }
             } else {
@@ -5255,10 +5351,10 @@ SITE AWARENESS: [This section will be dynamically updated with recent site activ
                     constructState.history[constructState.currentRoom].push({ role: 'assistant', content: aiResponse });
 
                     let aiName = constructState.currentRoom.toUpperCase();
-                    output.innerHTML += `<div class="ai-response"><span style="color:#c9b437">${aiName}:</span> ${parseTags(aiResponse)}</div>`;
+                    output.innerHTML += `<div class="ai-response"><span style="color:#c9b437">${escapeHtml(aiName)}:</span> ${parseTags(aiResponse)}</div>`;
                     window.checkAndGenerateMemoryCrystal(constructState.currentRoom);
                 } catch (e) {
-                    output.innerHTML += `<div class="system-msg error" style="color:#ef5350;">AI LINK FAILURE: ${e.message}</div>`;
+                    output.innerHTML += `<div class="system-msg error" style="color:#ef5350;">AI LINK FAILURE: ${escapeHtml(e.message)}</div>`;
                 }
             }
 
@@ -5418,7 +5514,7 @@ SITE AWARENESS: [This section will be dynamically updated with recent site activ
 
                         if (page === 'wire') {
                             const time = data.timestamp ? new Date(data.timestamp.toDate()).toLocaleString() : '';
-                            const identityBadge = data.identity ? `<span class="identity-badge ${data.identity}">${data.identity}</span>` : '';
+                            const identityBadge = identityBadgeHtml(data.identity);
                             const wrap = document.createElement('div');
                             wrap.className = 'message';
                             wrap.dataset.id = id;
@@ -5468,12 +5564,17 @@ SITE AWARENESS: [This section will be dynamically updated with recent site activ
             if (!reactions) reactions = {};
 
             Object.entries(reactions).forEach(([emoji, users]) => {
+                // A key that is not one of the five is not a reaction - it
+                // is whatever someone once wrote into the document.
+                if (!(emoji in REACTION_MAP) || !Array.isArray(users)) return;
                 const btn = document.createElement('button');
                 btn.className = `reaction-btn ${users.includes(window.currentUser?.username) ? 'active' : ''}`;
 
                 // Map to ASCII
-                const ascii = REACTION_MAP[emoji] || emoji;
-                btn.innerHTML = `${ascii} <span>${users.length}</span>`;
+                btn.textContent = REACTION_MAP[emoji] + ' ';
+                const n = document.createElement('span');
+                n.textContent = String(users.length);
+                btn.appendChild(n);
 
                 btn.onclick = (e) => { e.stopPropagation(); window.toggleReaction(id, collection, emoji); };
                 container.appendChild(btn);
@@ -5491,21 +5592,10 @@ SITE AWARENESS: [This section will be dynamically updated with recent site activ
 
         window.toggleReaction = async function (id, col, emoji) {
             if (!window.currentUser) return alert('login to react');
-            const uid = window.currentUser.username;
-            const docRef = doc(db, col, id);
             try {
-                const docSnap = await getDoc(docRef);
-                if (docSnap.exists()) {
-                    const data = docSnap.data();
-                    let reactions = data.reactions || {};
-                    let list = reactions[emoji] || [];
-                    if (list.includes(uid)) list = list.filter(u => u !== uid);
-                    else list.push(uid);
-
-                    if (list.length === 0) delete reactions[emoji];
-                    else reactions[emoji] = list;
-
-                    await updateDoc(docRef, { reactions });
+                // Toggled on the server, in a transaction, under your own name.
+                const reacted = await callSite('react', { collection: col, id, emoji });
+                if (reacted.ok) {
 
                     if (col !== 'messages') {
                         if (window.currentPage === 'single-post') {
@@ -5708,7 +5798,9 @@ Respond with ONLY the name in caps, nothing else.`;
             if (session && saved && saved.accountId) {
                 window.currentUser = saved;
                 // Load user's construct data and worlds from Firestore
-                await loadUserConstructData(window.currentUser.username);
+                window.constructReady = loadUserConstructData(window.currentUser.username);
+                await window.constructReady;
+                loadMyVoices();
                 await loadUserWorlds(window.currentUser.username);
                 // Load notification count
                 await loadNotifications();
@@ -5744,7 +5836,10 @@ Respond with ONLY the name in caps, nothing else.`;
                     const msg = doc.data();
                     const item = document.createElement('div');
                     item.className = 'ticker__item';
-                    item.innerHTML = `<span>[WIRE]</span> ${msg.username}: ${msg.text.substring(0, 50)}${msg.text.length > 50 ? '...' : ''}`;
+                    const tag = document.createElement('span');
+                    tag.textContent = '[WIRE]';
+                    const said = String(msg.text || '');
+                    item.append(tag, ' ' + String(msg.username || '') + ': ' + said.slice(0, 50) + (said.length > 50 ? '...' : ''));
                     ticker.appendChild(item);
                 });
             });

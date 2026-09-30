@@ -358,32 +358,37 @@ function setLoading(on) {
 }
 
 // ── RENDER WORKSHEET ──
+// Everything in a worksheet is model output, and model output is text: a
+// source passage can talk a model into emitting markup, and this page shares
+// its storage (and so everyone's login) with the rest of geteai.org.
+const esc = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
 function renderWorksheet(ws, meta) {
   const today = new Date().toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' });
 
   let preReadingHTML = ws.preReadingQuestions.map((q, i) =>
-    `<div class="ws-question"><span class="ws-question-num">${i + 1}.</span> ${q}</div>`
+    `<div class="ws-question"><span class="ws-question-num">${i + 1}.</span> ${esc(q)}</div>`
   ).join('');
 
   let vocabHTML = ws.vocabulary.map(v =>
-    `<div class="ws-vocab"><strong>${v.word}:</strong> ${v.definition}</div>`
+    `<div class="ws-vocab"><strong>${esc(v.word)}:</strong> ${esc(v.definition)}</div>`
   ).join('');
 
   const paragraphs = ws.passage.split(/\n\n+/).filter(p => p.trim());
-  let passageHTML = paragraphs.map(p => `<p class="ws-para">${p.trim()}</p>`).join('');
+  let passageHTML = paragraphs.map(p => `<p class="ws-para">${esc(p.trim())}</p>`).join('');
 
   let mcHTML = ws.multipleChoice.map((mc, i) => `
     <div class="ws-mc">
-      <div class="ws-mc-q">${i + 1}. ${mc.question}</div>
+      <div class="ws-mc-q">${i + 1}. ${esc(mc.question)}</div>
       <ul class="ws-mc-opts">
-        ${mc.options.map(o => `<li>${o}</li>`).join('')}
+        ${mc.options.map(o => `<li>${esc(o)}</li>`).join('')}
       </ul>
     </div>
   `).join('');
 
   let saHTML = ws.shortAnswerQuestions.map((q, i) => `
     <div class="ws-sa">
-      <div class="ws-sa-q">${ws.multipleChoice.length + i + 1}. ${q}</div>
+      <div class="ws-sa-q">${ws.multipleChoice.length + i + 1}. ${esc(q)}</div>
       <span class="ws-line"></span>
       <span class="ws-line"></span>
       <span class="ws-line"></span>
@@ -393,15 +398,15 @@ function renderWorksheet(ws, meta) {
   document.getElementById('printableArea').innerHTML = `
     <div class="ws-meta">
       <div class="ws-branding">geteai · Worksheet Generator</div>
-      <div class="ws-info">Reading Level: ${meta.readingLevel}<br>Generated: ${today}</div>
+      <div class="ws-info">Reading Level: ${esc(meta.readingLevel)}<br>Generated: ${today}</div>
     </div>
     <div class="ws-name-row">
       <div class="ws-name-field">Name: ___________________________</div>
       <div class="ws-name-field">Date: ___________________________</div>
       <div class="ws-name-field">Class: __________________________</div>
     </div>
-    <div class="ws-title">${ws.title}</div>
-    <div class="ws-level">Target Level: ${meta.readingLevel} &nbsp;|&nbsp; ${meta.ageLevel}</div>
+    <div class="ws-title">${esc(ws.title)}</div>
+    <div class="ws-level">Target Level: ${esc(meta.readingLevel)} &nbsp;|&nbsp; ${esc(meta.ageLevel)}</div>
 
     <div class="ws-section">Pre-Reading</div>
     <p style="font-size:13px;font-family:'Inter',sans-serif;color:#444;margin-bottom:14px;font-style:italic">Think about these questions before you read:</p>
@@ -412,7 +417,7 @@ function renderWorksheet(ws, meta) {
     ${vocabHTML}
 
     <div class="ws-section">Reading Passage</div>
-    <div class="ws-passage-title">${ws.passageTitle}</div>
+    <div class="ws-passage-title">${esc(ws.passageTitle)}</div>
     ${passageHTML}
 
     <div class="ws-section">Post-Reading — Multiple Choice</div>

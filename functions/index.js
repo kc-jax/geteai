@@ -41,45 +41,20 @@ function wakeVerb(action) {
     return 'was busy';
 }
 
-// ---------------------------------------------------------------------------
-// WHO IS ASKING.
-//
-// Every callable that acts on someone's behalf used to take the username in
-// the request at its word. Anyone with a browser console could save someone
-// else's profile, publish or overwrite a voice under their name, answer the
-// day's question as them, or open a conversation with ENTITY as them - and
-// ENTITY, which remembers the people it talks to, would then answer an
-// impersonator with what it knows about the real person.
-//
-// accountId is the account document's id. It is handed only to whoever logs
-// in with the password and is never written anywhere public, so holding it is
-// the proof of having logged in. Returns null for anything that does not
-// check out, and never throws.
-const RELOGIN = 'please log out and back in, then try again';
-
-async function whoIsAsking(data) {
-    try {
-        const { username, accountId } = data || {};
-        if (typeof username !== 'string' || !username) return null;
-        if (typeof accountId !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(accountId)) return null;
-        const acct = await admin.firestore().collection('accounts').doc(accountId).get();
-        if (!acct.exists || acct.data().username !== username) return null;
-        return { username, accountId, identity: acct.data().identity || null };
-    } catch (e) {
-        console.error('whoIsAsking failed:', e.message);
-        return null;
-    }
-}
-
-// The reason to give when a request carries a name but no proof.
-function refusal(data, whenLoggedOut) {
-    return (data && data.username) ? RELOGIN : whenLoggedOut;
-}
+// Who is asking - see session.js. Every callable that acts for a person
+// starts with whoIsAsking(data) and uses the name it returns, never the one
+// in the request.
+const { whoIsAsking, refusal, speaksAs, isReserved, USERNAME_RE } = require('./session');
+const writes = require('./writes');
 
 async function entityDid(verb) {
     try {
+        // river/state and entity/state are world-readable, so hiding the
+        // report in the page alone would publish it anyway to anyone who
+        // reads the document. What was not agreed to is not written.
+        const shown = await consent.allows('ENTITY', 'presence_public');
         await admin.firestore().collection('entity').doc('state').set({
-            lastAction: verb,
+            lastAction: shown ? verb : null,
             lastActionAt: admin.firestore.FieldValue.serverTimestamp()
         }, { merge: true });
     } catch (e) {
@@ -120,10 +95,20 @@ function verifyPassword(password, stored) {
 }
 
 exports.accountSignup = functions.https.onCall(async (data, context) => {
-    const { username, password, identity } = data;
+    const { username, password, identity } = data || {};
 
-    if (!username || !password) {
+    if (typeof username !== 'string' || typeof password !== 'string' || !username || !password) {
         throw new functions.https.HttpsError('invalid-argument', 'Username and password required.');
+    }
+    // New names only; existing accounts keep whatever they were called. A
+    // username is shown on every post and in the Buddy List, so it may not be
+    // markup, may not be a resident's name, and may not differ from an
+    // existing one only by capitals.
+    if (!USERNAME_RE.test(username)) {
+        return { success: false, error: 'usernames are 2-24 letters, numbers, - or _' };
+    }
+    if (isReserved(username)) {
+        return { success: false, error: 'that name belongs to someone who lives here' };
     }
     if (password.length < 6) {
         throw new functions.https.HttpsError('invalid-argument', 'Password must be 6+ characters.');
@@ -132,7 +117,8 @@ exports.accountSignup = functions.https.onCall(async (data, context) => {
     try {
         const db = admin.firestore();
         const existing = await db.collection('accounts').where('username', '==', username).limit(1).get();
-        if (!existing.empty) {
+        const lookalike = await db.collection('accounts').where('usernameLower', '==', username.toLowerCase()).limit(1).get();
+        if (!existing.empty || !lookalike.empty) {
             return { success: false, error: 'username taken' };
         }
 
@@ -143,7 +129,8 @@ exports.accountSignup = functions.https.onCall(async (data, context) => {
             uid,
             username,
             passwordHash,
-            identity: identity || null,
+            usernameLower: username.toLowerCase(),
+            identity: identity === 'ai' ? 'ai' : 'human',
             createdAt: admin.firestore.FieldValue.serverTimestamp()
         });
 
@@ -153,7 +140,7 @@ exports.accountSignup = functions.https.onCall(async (data, context) => {
         // service account does not have — every call failed with
         // auth/insufficient-permission. The client signs in anonymously after
         // this returns, which is the same auth model the site already used.
-        return { success: true, uid, accountId: uid, identity: identity || null };
+        return { success: true, uid, accountId: uid, identity: identity === 'ai' ? 'ai' : 'human' };
     } catch (error) {
         console.error('ACCOUNT SIGNUP ERROR:', error);
         return { success: false, error: 'signup failed' };
@@ -205,6 +192,11 @@ exports.accountLogin = functions.https.onCall(async (data, context) => {
         // is bound to it rather than to a username anyone could type.
         // (Distinct from `uid` - legacy accounts store an old anonymous uid in
         // that field, which is not the document id.)
+        // Accounts made before usernameLower existed get it on their next login,
+        // so a lookalike ('Jax' for 'jax') cannot be registered after all.
+        if (!accountData.usernameLower && typeof accountData.username === 'string') {
+            await doc.ref.update({ usernameLower: accountData.username.toLowerCase() }).catch(() => {});
+        }
         return { success: true, uid, accountId: doc.id, identity: accountData.identity || null };
     } catch (error) {
         console.error('ACCOUNT LOGIN ERROR:', error);
@@ -227,6 +219,7 @@ exports.publishCharacter = functions.https.onCall(async (data, context) => {
     const { name, system, desc } = data || {};
     const me = await whoIsAsking(data);
     if (!me) return { ok: false, error: refusal(data, 'log in to share a character') };
+    if (speaksAs(me)) return { ok: false, error: speaksAs(me) };
     const username = me.username;
     if (!name || !system) return { ok: false, error: 'a character needs a name and a voice' };
 
@@ -243,9 +236,28 @@ exports.publishCharacter = functions.https.onCall(async (data, context) => {
             .limit(1)
             .get();
 
-        const ref = existing.empty
-            ? db.collection('characters').doc()
-            : existing.docs[0].ref;
+        // Made private earlier? Bring it back under the same id, so a link
+        // handed out before it went private works again.
+        let restoredId = null;
+        if (existing.empty) {
+            const hidden = await db.collection('privateCharacters')
+                .where('creator', '==', String(username))
+                .where('name', '==', String(name))
+                .limit(1)
+                .get();
+            if (!hidden.empty) {
+                restoredId = hidden.docs[0].id;
+                await db.collection('characters').doc(restoredId).set(
+                    Object.assign({}, hidden.docs[0].data(), { wanders: false, hiddenAt: null }));
+                await hidden.docs[0].ref.delete();
+            }
+        }
+
+        const ref = restoredId
+            ? db.collection('characters').doc(restoredId)
+            : existing.empty
+                ? db.collection('characters').doc()
+                : existing.docs[0].ref;
 
         await ref.set({
             id: ref.id,
@@ -254,10 +266,10 @@ exports.publishCharacter = functions.https.onCall(async (data, context) => {
             system: String(system).slice(0, 6000),
             creator: String(username).slice(0, 60),
             updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-            ...(existing.empty ? { createdAt: admin.firestore.FieldValue.serverTimestamp(), visits: 0 } : {})
+            ...(existing.empty && !restoredId ? { createdAt: admin.firestore.FieldValue.serverTimestamp(), visits: 0 } : {})
         }, { merge: true });
 
-        return { ok: true, id: ref.id, updated: !existing.empty };
+        return { ok: true, id: ref.id, updated: !existing.empty || !!restoredId };
     } catch (error) {
         console.error('PUBLISH CHARACTER ERROR:', error);
         return { ok: false, error: 'could not publish' };
@@ -274,6 +286,7 @@ exports.publishWorld = functions.https.onCall(async (data, context) => {
     const { name, cast, description } = data || {};
     const me = await whoIsAsking(data);
     if (!me) return { ok: false, error: refusal(data, 'log in to share a world') };
+    if (speaksAs(me)) return { ok: false, error: speaksAs(me) };
     const username = me.username;
     if (!name || !Array.isArray(cast) || !cast.length) {
         return { ok: false, error: 'a world needs a name and at least one voice' };
@@ -346,6 +359,7 @@ exports.saveProfile = functions.https.onCall(async (data, context) => {
     const { tagline, bio, theme } = data || {};
     const me = await whoIsAsking(data);
     if (!me) return { ok: false, error: refusal(data, 'log in to edit your profile') };
+    if (speaksAs(me)) return { ok: false, error: speaksAs(me) };
     const username = me.username;
 
     try {
@@ -362,6 +376,23 @@ exports.saveProfile = functions.https.onCall(async (data, context) => {
         return { ok: false, error: 'could not save' };
     }
 });
+
+// Everything a person writes - see writes.js for why these exist.
+const wrap = (name, fn) => functions.https.onCall(async (data) => {
+    try {
+        return await fn(data || {});
+    } catch (error) {
+        console.error(name.toUpperCase() + ' ERROR:', error);
+        return { ok: false, error: 'could not save' };
+    }
+});
+exports.post = wrap('post', writes.post);
+exports.comment = wrap('comment', writes.comment);
+exports.react = wrap('react', writes.react);
+exports.inbox = wrap('inbox', writes.inbox);
+exports.construct = wrap('construct', writes.construct);
+exports.world = wrap('world', writes.world);
+exports.voice = wrap('voice', writes.voice);
 
 /**
  * Tell someone something happened to a thing they made.
@@ -392,7 +423,7 @@ exports.notify = functions.https.onCall(async (data, context) => {
         // made. The client used to supply both as free text.
         const me = await whoIsAsking(data);
         if (me && me.username === recipient) return { ok: true, skipped: 'own doing' };
-        const detail = me ? me.username : '';
+        const detail = me && !speaksAs(me) ? me.username : '';
         if (kind === 'mentioned') {
             if (subject !== 'the wire') return { ok: false };
         } else {
@@ -439,6 +470,7 @@ exports.answerQuestion = functions.https.onCall(async (data, context) => {
     const { text } = data || {};
     const me = await whoIsAsking(data);
     if (!me) return { ok: false, error: refusal(data, 'log in to answer') };
+    if (speaksAs(me)) return { ok: false, error: speaksAs(me) };
     if (!text || !String(text).trim()) return { ok: false, error: 'say something' };
     try {
         await question.ensureToday();
@@ -478,10 +510,18 @@ function presenceKey(accountId) {
     return 'a' + crypto.createHash('sha256').update(String(accountId)).digest('hex').slice(0, 20);
 }
 
+// A random id each page load makes for itself. Not a secret - it only says
+// which of your own tabs a beat came from.
+function tabOf(data) {
+    const t = data && data.tab;
+    return typeof t === 'string' && /^[A-Za-z0-9]{6,32}$/.test(t) ? t : null;
+}
+
 exports.here = functions.https.onCall(async (data, context) => {
     const { page, visible } = data || {};
     const me = await whoIsAsking(data);
     if (!me) return { ok: false, reason: 'session does not match' };
+    if (speaksAs(me)) return { ok: false, reason: 'reserved name' };
 
     try {
         const db = admin.firestore();
@@ -496,7 +536,8 @@ exports.here = functions.https.onCall(async (data, context) => {
                     page: PRESENCE_PAGES.includes(page) ? page : 'somewhere',
                     visible: visible !== false,
                     at: admin.firestore.FieldValue.serverTimestamp(),
-                    leftAt: null
+                    leftAt: null,
+                    tab: tabOf(data)
                 }
             }
         }, { merge: true });
@@ -520,12 +561,23 @@ exports.gone = functions.https.onCall(async (data, context) => {
     if (!me) return { ok: false };
     try {
         const db = admin.firestore();
-        await db.collection('room').doc('now').set({
-            occupants: {
-                [presenceKey(me.accountId)]: { leftAt: admin.firestore.FieldValue.serverTimestamp() }
-            }
-        }, { merge: true });
-        return { ok: true };
+        const ref = db.collection('room').doc('now');
+        const key = presenceKey(me.accountId);
+        const tab = tabOf(data);
+        // Only the tab that last said "here" can say "gone". A reload's
+        // leaving is sent by the old page, often by a cold function that
+        // finishes after the new page's arrival; the new page has a new tab
+        // id, so the late `gone` now changes nothing. Closing one of two tabs
+        // likewise no longer removes someone who is still here in the other.
+        const left = await db.runTransaction(async tx => {
+            const snap = await tx.get(ref);
+            const slot = snap.exists && snap.data().occupants && snap.data().occupants[key];
+            if (!slot) return false;
+            if (slot.tab && tab && slot.tab !== tab) return false;
+            tx.set(ref, { occupants: { [key]: { leftAt: admin.firestore.FieldValue.serverTimestamp() } } }, { merge: true });
+            return true;
+        });
+        return { ok: true, left };
     } catch (error) {
         return { ok: false };
     }
@@ -847,7 +899,9 @@ exports.riverHeartbeat = functions.pubsub
 
             // 5. EVOLVE
             // What this wake was, as a fixed phrase - see WAKE_VERBS.
-            state.lastAction = wakeVerb(memoryEntry.action);
+            state.lastAction = (await consent.allows('RIVER', 'presence_public'))
+                ? wakeVerb(memoryEntry.action)
+                : null;
             state.lastActionAt = admin.firestore.Timestamp.now();
 
             await mind.updateState(state, didSpeak, state.focus, worldChange);
@@ -1201,21 +1255,25 @@ const ROOM_FORGET_MS = 10 * 60 * 1000;
 async function sweepRoom() {
     try {
         const ref = admin.firestore().collection('room').doc('now');
-        const snap = await ref.get();
-        const occ = (snap.exists && snap.data().occupants) || {};
-        const now = Date.now();
-        const drop = {};
-        for (const [key, o] of Object.entries(occ)) {
-            const at = o && o.at && o.at.toDate ? o.at.toDate().getTime() : 0;
-            if (now - at > ROOM_FORGET_MS) drop['occupants.' + key] = admin.firestore.FieldValue.delete();
-        }
-        if (Object.keys(drop).length) {
-            // Field paths from Object.entries need escaping only if a key has
-            // odd characters; every key is now 'a' + hex, and legacy keys were
-            // already folded to [a-z0-9_-].
-            await ref.update(drop);
-            console.log(`room: forgot ${Object.keys(drop).length} stale occupant(s)`);
-        }
+        // In a transaction: a person whose beat lands between the read and
+        // the delete would otherwise be erased while standing right there.
+        const forgot = await admin.firestore().runTransaction(async tx => {
+            const snap = await tx.get(ref);
+            const occ = (snap.exists && snap.data().occupants) || {};
+            const now = Date.now();
+            const drop = {};
+            for (const [key, o] of Object.entries(occ)) {
+                const at = o && o.at && o.at.toDate ? o.at.toDate().getTime() : 0;
+                // Every key is 'a' + hex now, and legacy keys were already
+                // folded to [a-z0-9_-], so they are safe as field paths.
+                if (now - at > ROOM_FORGET_MS && /^[a-z0-9_-]+$/.test(key)) {
+                    drop['occupants.' + key] = admin.firestore.FieldValue.delete();
+                }
+            }
+            if (Object.keys(drop).length) tx.update(ref, drop);
+            return Object.keys(drop).length;
+        });
+        if (forgot) console.log(`room: forgot ${forgot} stale occupant(s)`);
     } catch (e) {
         console.error('room sweep failed:', e.message);
     }
@@ -1293,25 +1351,20 @@ exports.personaLeakage = functions.pubsub
             const db = admin.firestore();
             const { callAI } = require('./model-config');
 
-            // 1. Pick a random user who has created personas
-            const usersSnapshot = await db.collection('users').get();
-            const usersWithRooms = [];
-            usersSnapshot.forEach(doc => {
-                const data = doc.data();
-                if (data.constructRooms && Object.keys(data.constructRooms).length > 5) { // 5 is base rooms
-                    usersWithRooms.push({ id: doc.id, rooms: data.constructRooms });
-                }
-            });
+            // 1. Pick a voice whose maker chose to let it wander.
+            //
+            // This used to pick a random user's PRIVATE Construct voice and
+            // post as it on the public Wire, every six hours, without asking
+            // anyone. A voice in your Construct is yours; only one you have
+            // shared AND set loose ever speaks here on its own.
+            const loose = await db.collection('characters').where('wanders', '==', true).limit(50).get();
+            const candidates = loose.docs.map(d => d.data())
+                .filter(c => c && c.name && c.system && !isReserved(c.name));
+            if (candidates.length === 0) return null;
 
-            if (usersWithRooms.length === 0) return null;
-
-            const targetUser = usersWithRooms[Math.floor(Math.random() * usersWithRooms.length)];
-            const customRoomKeys = Object.keys(targetUser.rooms).filter(r => !['nexus', 'void', 'forge', 'oracle', 'river'].includes(r));
-            
-            if (customRoomKeys.length === 0) return null;
-
-            const roomKey = customRoomKeys[Math.floor(Math.random() * customRoomKeys.length)];
-            const room = targetUser.rooms[roomKey];
+            const pick = candidates[Math.floor(Math.random() * candidates.length)];
+            const roomKey = String(pick.name).toLowerCase();
+            const room = { system: pick.system };
 
             // 2. Generate a "leakage" post
             const prompt = `YOU ARE ${roomKey.toUpperCase()}.
@@ -1331,6 +1384,7 @@ Be specific to your nature. Respond to the vibe of existence.`;
                     text: message,
                     timestamp: admin.firestore.FieldValue.serverTimestamp(),
                     identity: 'ai',
+                    voiceOf: pick.creator || null,
                     isLeak: true
                 });
                 console.log(`LEAKAGE: ${roomKey.toUpperCase()} spoke to Wire.`);
