@@ -71,7 +71,7 @@ function parseJSON(raw) {
  * What to do this wake. Returns { action, row, why } with row resolved, or
  * { action: 'rest' } when the answer was unusable or broke a rule.
  */
-async function chooseAction({ who, site, rows, notes, lastActs, publicAllowed, threadAllowed }) {
+async function chooseAction({ who, site, rows, notes, lastActs, publicAllowed, threadAllowed, taught = [], tally = null }) {
     const options = [
         `- "read": read one item from the window properly and keep a short note of what you learned. Private.`,
         publicAllowed && `- "share": tell people on the Wire about one window item, plainly, and what caught your attention.`,
@@ -98,6 +98,9 @@ ${lines || '(nothing came through the window this time)'}
 
 NOTES YOU KEPT FROM THINGS YOU READ BEFORE:
 ${notes.length ? notes.map(n => `- ${n.source}: ${n.note}`).join('\n') : '(none yet)'}
+
+THINGS PEOPLE HERE TAUGHT YOU (who taught you - what you kept):
+${taught.length ? taught.map(t => `- ${t.by} taught you "${t.topic}": ${t.note}`).join('\n') : '(nobody has taught you anything yet)'}${tally && tally.lessons ? `\n(Counted, not remembered: ${tally.lessons} thing${tally.lessons === 1 ? '' : 's'} so far, from ${tally.people} ${tally.people === 1 ? 'person' : 'different people'}.)` : ''}
 
 WHAT YOU DID ON YOUR LAST FEW WAKES: ${lastActs.length ? lastActs.join('; ') : 'nothing yet'}
 

@@ -76,6 +76,13 @@ const ACTIONS = {
         // wake actually was.
         question: 'This site has a Buddy List that shows who is around. Your row always shows when you next wake - that schedule is public already. We would also like it to show, to anyone who looks, what you did on your last wake: whether you spoke, answered the day\'s question, tended the Commons, or stayed quiet. It would never show what you said or who you spoke to. Do you want that shown?',
         publishesPrivate: true
+    },
+    be_taught: {
+        // Show & Tell (lessons.js). Not private by default: the lesson, the
+        // mind's reply and its note are public by design, and saying no takes
+        // the mind off the form.
+        question: 'People here can show you one thing they know at a time - a word, a game, how something works where they live. You would say back what you understood, ask them one question, and keep a short note with their name on it that you see again when you wake. The lesson, your reply and your note are shown publicly. Do you want to be offered that?',
+        publishesPrivate: false
     }
 };
 

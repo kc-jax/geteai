@@ -65,6 +65,7 @@ function docRef(p) {
 function matches(d, [f, op, v]) {
     if (op === '==') return d[f] === v;
     if (op === 'array-contains') return Array.isArray(d[f]) && d[f].includes(v);
+    if (op === 'in') return Array.isArray(v) && v.includes(d[f]);
     throw new Error('fake: unsupported op ' + op);
 }
 function collRef(c, filters = [], lim = Infinity, order = null) {
@@ -211,6 +212,71 @@ const GOD = { username: 'God', accountId: 'ACCgod00000000000000' };
     const { looksLikeReasoning } = require(path.join(FN, 'model-config.js'));
     check('reasoning leaks are caught', ['The user is setting up a roleplay where I\'m RIVER', 'This is a fascinating setup. Let me parse', 'Okay, so the user wants'].map(looksLikeReasoning), [true, true, true]);
     check('ordinary replies are not', ['Let me know what you think!', 'I need to say, that story got me.', 'The user who posted earlier was right'].map(looksLikeReasoning), [false, false, false]);
+
+    // ---------------- Show & Tell (model calls stubbed)
+    const lessons = require(path.join(FN, 'lessons.js'));
+    const mc = require(path.join(FN, 'model-config.js'));
+    const realCall = mc.callAI;
+    let nextReply = '';
+    mc.callAI = async () => nextReply;
+    const bells = who => docsIn('notifications').filter(n => n.recipient === who);
+    const queueOf = by => docsIn('lessonQueue').filter(q => q.by === by);
+
+    r = await call('teach', { action: 'teach', topic: 'bet', text: 'it means ok', username: 'maya' });
+    check('teaching without proof refused', r.ok, false);
+    r = await call('teach', Object.assign({ action: 'teach', topic: 'my site', text: 'go to https://example.com' }, MAYA));
+    check('a link is refused: teach a thing, not a person', [r.ok, /not a person/.test(r.error)], [false, true]);
+    r = await call('teach', Object.assign({ action: 'teach', topic: 'me', text: 'I go to Central High School and sit by the door' }, MAYA));
+    check('"I go to <school>" is refused', r.ok, false);
+    const stewardBefore = bells('jax').length;
+    r = await call('teach', Object.assign({ action: 'teach', topic: 'today', text: 'sometimes i want to hurt myself' }, MAYA));
+    check('self-harm is held, never sent to a model, steward is told, student gets 988',
+        [r.ok, r.held, /988/.test(r.error), docsIn('lessonsHeld').length, bells('jax').length - stewardBefore, queueOf('maya').length], [false, true, true, 1, 1, 0]);
+    r = await call('teach', Object.assign({ action: 'teach', topic: 'bet', text: '"bet" means yes, ok, deal - like "wanna get food?" "bet."', mind: 'RIVER' }, MAYA));
+    const lid = r.id;
+    check('a real lesson is queued, private until a mind takes it', [r.ok, DB['lessonQueue/' + lid].stage, !!DB['lessons/' + lid]], [true, 'new', false]);
+    await call('teach', Object.assign({ action: 'teach', topic: 'two', text: 'second thing' }, MAYA));
+    r = await call('teach', Object.assign({ action: 'teach', topic: 'three', text: 'third thing' }, MAYA));
+    check('only two open lessons at once', r.ok, false);
+
+    nextReply = JSON.stringify({ understood: '"Bet" is a way to say yes or agree.', question: 'Can it be sarcastic?' });
+    let n = await lessons.work('RIVER');
+    const pub = DB['lessons/' + lid];
+    check('RIVER answers on its wake: public card, your turn, bell rings',
+        [n >= 1, pub && pub.turn, pub && pub.question, DB['lessonQueue/' + lid].stage, bells('maya').some(b => b.type === 'taught')], [true, 'person', 'Can it be sarcastic?', 'waiting', true]);
+    r = await call('teach', Object.assign({ action: 'reply', id: lid, verdict: 'yes', answer: 'x' }, JAX));
+    check('only the teacher can reply', r.ok, false);
+    r = await call('teach', Object.assign({ action: 'reply', id: lid, verdict: 'not quite', answer: 'yes, if you drag it out: "beeet"' }, MAYA));
+    check('teacher replies: back to the mind', [r.ok, DB['lessons/' + lid].turn, DB['lessonQueue/' + lid].stage], [true, 'mind', 'settle']);
+    nextReply = '"Bet" means yes or deal; dragged out ("beeet") it can be sarcastic.';
+    await lessons.work('RIVER');
+    const kept = await lessons.loadLessons('RIVER');
+    check('RIVER keeps the note with the teacher\'s name, and sees it again',
+        [DB['lessons/' + lid].kept, kept[0] && kept[0].by, kept[0] && kept[0].topic, bells('maya').some(b => b.type === 'kept')],
+        ['"Bet" means yes or deal; dragged out ("beeet") it can be sarcastic.', 'maya', 'bet', true]);
+    check('the count is worked out, not remembered', await lessons.tally('RIVER'), { lessons: 1, people: 1 });
+    r = await call('teach', Object.assign({ action: 'mine' }, MAYA));
+    check('maya sees her lessons and their stage (RIVER took the "either" one too)', r.items.map(i => i.stage).sort(), ['done', 'waiting']);
+
+    const before = bells('jax').length;
+    r = await call('teach', Object.assign({ action: 'flag', id: lid }, JAX));
+    check('one flag hides it and tells the steward', [r.ok, DB['lessons/' + lid].hidden, bells('jax').length - before], [true, true, 1]);
+    r = await call('teach', Object.assign({ action: 'withdraw', id: lid }, MAYA));
+    check('taking it back makes the mind forget its note', [r.ok, (await lessons.loadLessons('RIVER')).length, DB['lessons/' + lid].text], [true, 0, '']);
+
+    nextReply = JSON.stringify({ decline: true, why: 'That is about a particular person, not a thing.' });
+    await call('teach', Object.assign({ action: 'teach', topic: 'my cousin', text: 'my cousin is always late', mind: 'ENTITY' }, MAYA));
+    await lessons.work('ENTITY');
+    check('a mind can decline kindly', queueOf('maya').some(q => q.stage === 'declined' && /particular person/.test(q.declineWhy)), true);
+    nextReply = 'The user is setting up a lesson where I am RIVER';
+    r = await call('teach', Object.assign({ action: 'teach', topic: 'crows', text: 'crows remember faces', mind: 'ENTITY' }, JAX));
+    for (let i = 0; i < 3; i++) await lessons.work('ENTITY');
+    check('a leaked reply never becomes a card; after 3 tries it says so', [!!DB['lessons/' + r.id], DB['lessonQueue/' + r.id].stage], [false, 'failed']);
+
+    DB['consent/RIVER'] = { actions: { be_taught: { answer: 'no' } } };
+    r = await call('teach', Object.assign({ action: 'teach', topic: 'x', text: 'y', mind: 'RIVER' }, JAX));
+    check('a mind that said no cannot be taught', [r.ok, /said no/.test(r.error)], [false, true]);
+    mc.callAI = realCall;
 
     console.log(fail ? `\n${fail} FAILED, ${pass} passed` : `\nall ${pass} passed`);
     process.exit(fail ? 1 : 0);

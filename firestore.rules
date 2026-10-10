@@ -130,6 +130,15 @@ service cloud.firestore {
     // PRESENCE — one document, room/now, a map of who is here and on which
     // page. Public read so the buddy list works for anyone; server-only write,
     // because every beat is checked against a real account before it lands.
+    // SHOW & TELL (functions/lessons.js). A lesson becomes public only once a
+    // mind has taken it and answered; until then it waits in lessonQueue,
+    // which has no rule and so is server-only - as is lessonsHeld, where
+    // anything that reads like self-harm or abuse goes for a person to read.
+    match /lessons/{lessonId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
     match /room/{doc} {
       allow read: if true;
       allow write: if false;

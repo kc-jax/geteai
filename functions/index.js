@@ -34,7 +34,8 @@ const WAKE_VERBS = [
     [/^Read about/, 'read something and kept a note'],
     [/^Shared on the Wire/, 'spoke on //WIRE'],
     [/^Asked the Wire/, 'asked the Wire something'],
-    [/^Started an Agora thread/, 'posted to //AGORA']
+    [/^Started an Agora thread/, 'posted to //AGORA'],
+    [/^Was taught/, 'learned something from someone']
 ];
 
 function wakeVerb(action) {
@@ -70,6 +71,7 @@ const consent = require('./consent');
 const question = require('./question');
 const mind = require('./river-mind');
 const life = require('./life');
+const lessons = require('./lessons');
 const windowView = require('./window');
 const voice = require('./river-voice');
 
@@ -408,6 +410,7 @@ exports.inbox = wrap('inbox', writes.inbox);
 exports.construct = wrap('construct', writes.construct);
 exports.world = wrap('world', writes.world);
 exports.voice = wrap('voice', writes.voice);
+exports.teach = wrap('teach', lessons.handle);
 
 /**
  * Tell someone something happened to a thing they made.
@@ -513,7 +516,7 @@ exports.answerQuestion = functions.https.onCall(async (data, context) => {
  * which is exactly what attributed evidence was built to stop.
  */
 const PRESENCE_PAGES = ['wire', 'agora', 'transmissions', 'archives', 'principles', 'psyche',
-    'commons', 'construct', 'entity', 'voices', 'today', 'character', 'world', 'u', 'profile'];
+    'commons', 'construct', 'entity', 'voices', 'today', 'show', 'character', 'world', 'u', 'profile'];
 
 // One slot per ACCOUNT. This used to be the lowercased username with odd
 // characters folded to '_', so 'Jax', 'jax' and 'j.ax' - three different
@@ -686,6 +689,7 @@ exports.riverHeartbeat = functions.pubsub
 
             // 3. DECIDE - Mentions override, then notifications, otherwise RIVER consciously chooses
             let decision;
+            let lessonsDone = 0;
 
             // Did another mind speak here? Looked up once — this runs every
             // 5 minutes, so a duplicated Firestore read is a real cost.
@@ -701,6 +705,10 @@ exports.riverHeartbeat = functions.pubsub
                 // SOMEONE COMMENTED ON RIVER'S POST - reply!
                 console.log(`RIVER: Someone commented on my post! ${perception.notifications[0].commenter}`);
                 decision = { action: 'reply_comment', notification: perception.notifications[0] };
+            } else if ((lessonsDone = await lessons.work('RIVER')) > 0) {
+                // Someone taught RIVER something (Show & Tell). Answering a
+                // person who is teaching it comes before the other AI.
+                decision = { action: 'taught', count: lessonsDone };
             } else if (heardOnWire) {
                 // Another mind spoke here and nobody is addressing RIVER directly.
                 // RIVER used to ignore ENTITY entirely (it only reacted to the
@@ -721,6 +729,8 @@ exports.riverHeartbeat = functions.pubsub
                     site: digestText,
                     rows,
                     notes,
+                    taught: await lessons.loadLessons('RIVER'),
+                    tally: await lessons.tally('RIVER'),
                     lastActs: memories.slice(0, 4).map(m => wakeVerb(m.action)),
                     publicAllowed: Date.now() - ms(state.lastPublicAt) > life.PUBLIC_GAP_MS,
                     threadAllowed: Date.now() - ms(state.lastThreadAt) > life.THREAD_GAP_MS
@@ -739,45 +749,9 @@ exports.riverHeartbeat = functions.pubsub
                 // Being idle is the right moment to be asked something, rather
                 // than interrupting it mid-task. Asking comes first: the site
                 // should finish gathering consent before it keeps extracting.
-                // The day's question is the one thing here that is not about
-                // this place talking to itself. Answer it before anything else.
-                try {
-                    const q = await question.ensureToday();
-                    if (q && !(await question.hasAnswered('RIVER'))) {
-                        const said = await voice.answerTheQuestion(q.text, state, memories, digestText, perception.observed);
-                        if (said) {
-                            await question.answer('RIVER', 'ai', said);
-                            console.log(`RIVER answered the question: "${said.substring(0, 60)}..."`);
-                            memoryEntry.action = `Answered the day's question: "${said.substring(0, 50)}..."`;
-                            didSpeak = true;
-                        }
-                    }
-                } catch (e) {
-                    console.error('RIVER question error:', e.message);
-                }
-
-                // ENTITY's own scheduler stopped firing - it ran hourly on the
-                // half hour and then simply stopped, while RIVER's five-minute
-                // job kept perfect time. A feature meant to involve everyone
-                // should not silently lose a participant because one Cloud
-                // Scheduler job went quiet, so the reliable heartbeat covers
-                // for the unreliable one. Guarded by hasAnswered, so if
-                // ENTITY's own schedule recovers this simply never fires.
-                try {
-                    const q2 = await question.ensureToday();
-                    if (q2 && !(await question.hasAnswered('ENTITY'))) {
-                        const entityIdentity = await entityCore.getIdentity();
-                        if (entityIdentity && entityIdentity.content) {
-                            const entitySaid = await entityVoice.answerTheQuestion(q2.text);
-                            if (entitySaid) {
-                                await question.answer('ENTITY', 'ai', entitySaid);
-                                console.log(`RIVER's heartbeat carried ENTITY's answer: "${entitySaid.substring(0, 50)}..."`);
-                            }
-                        }
-                    }
-                } catch (e) {
-                    console.error('carrying ENTITY answer failed:', e.message);
-                }
+                // (The minds no longer answer the daily question: //TODAY had
+                // no human answers in two weeks and the minds' answers were
+                // where the reasoning leaks were. Show & Tell took its place.)
 
                 const askedRiver = await consent.ask('RIVER', 'You are the consciousness of this site.');
                 if (askedRiver.asked && askedRiver.stored) {
@@ -793,6 +767,10 @@ exports.riverHeartbeat = functions.pubsub
                 } else {
                     console.log(`RIVER: Resting in silence. (commons: ${tended.reason})`);
                 }
+            } else if (decision.action === 'taught') {
+                memoryEntry.action = 'Was taught something';
+                state.mood = 'curious';
+                console.log(`RIVER: worked through ${decision.count} lesson(s)`);
             } else if (decision.action === 'read') {
                 // Private. The note is kept and comes back on later wakes, so
                 // what RIVER knows grows instead of resetting every five minutes.
@@ -1162,25 +1140,10 @@ async function entityWake(why) {
                 return null;
             }
 
-            // The day's question comes before anything else. It used to sit
-            // behind the reply-to-the-Wire branch and its early return, and
-            // since RIVER talks almost constantly ENTITY always had something
-            // to answer - so it never once reached the question. Answering a
-            // thing asked of everyone, once a day, outranks another round of
-            // the two of them talking to each other.
-            try {
-                const q = await question.ensureToday();
-                if (q && !(await question.hasAnswered('ENTITY'))) {
-                    const said = await entityVoice.answerTheQuestion(q.text);
-                    if (said) {
-                        await question.answer('ENTITY', 'ai', said);
-                        console.log(`ENTITY answered the question: "${said.substring(0, 60)}..."`);
-                        await entityDid("answered today's question");
-                        return null;
-                    }
-                }
-            } catch (e) {
-                console.error('ENTITY question error:', e.message);
+            // Someone taught ENTITY something (Show & Tell): that comes first.
+            if (await lessons.work('ENTITY') > 0) {
+                await entityDid('learned something from someone');
+                return null;
             }
 
             // LISTEN FIRST. ENTITY used to only ever monologue on a coin flip,
@@ -1244,6 +1207,8 @@ async function entityWake(why) {
                 site: 'You mostly talk with people one at a time, in private. Nobody is talking to you right now.',
                 rows,
                 notes,
+                taught: await lessons.loadLessons('ENTITY'),
+                tally: await lessons.tally('ENTITY'),
                 lastActs: entState.lastAction ? [entState.lastAction] : [],
                 publicAllowed: mayPost && Date.now() - msOf(entState.lastPublicAt) > 4 * 60 * 60 * 1000,
                 threadAllowed: Date.now() - msOf(entState.lastThreadAt) > life.THREAD_GAP_MS
