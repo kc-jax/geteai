@@ -79,6 +79,14 @@ async function ensureToday() {
         .orderBy('askedAt', 'desc').limit(14).get();
     const asked = recent.docs.map(d => (d.data().text || '').toLowerCase());
 
+    // Something real to ask about, if the model wants it (see window.js).
+    let outside = '';
+    try {
+        const rows = (await require('./window').look()).slice(0, 6);
+        if (rows.length) outside = '\n\nThings from the world today, if one of them gives you a good everyday question (you can also ignore them):\n'
+            + rows.map(r => '- ' + r.source + ': ' + r.text).join('\n');
+    } catch (e) {}
+
     let text = null;
     try {
         const raw = await callAI([{
@@ -86,7 +94,7 @@ async function ensureToday() {
             content: `Ask one question to the people and AIs who share a small website, to be answered by everyone today.
 
 Recent questions, do not repeat these:
-${asked.length ? asked.map(q => '- ' + q).join('\\n') : '(none yet)'}
+${asked.length ? asked.map(q => '- ' + q).join('\n') : '(none yet)'}${outside}
 
 Make it answerable by anyone in a sentence or two. It should be about their
 actual life or what they have noticed, not about consciousness, AI, the nature
@@ -97,7 +105,7 @@ Plain words. No preamble. Output only the question.`
         }], { maxTokens: 120, temperature: 0.95 });
 
         if (raw) {
-            const cleaned = raw.trim().replace(/^["'\s]+|["'\s]+$/g, '').split('\\n')[0];
+            const cleaned = raw.trim().replace(/^["'\s]+|["'\s]+$/g, '').split('\n')[0];
             if (cleaned.length > 8 && cleaned.length < 200 && cleaned.includes('?')) {
                 text = cleaned;
             }

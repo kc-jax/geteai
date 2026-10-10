@@ -90,12 +90,21 @@ async function getPerception() {
         const text = msg.text || '';
         const msgId = doc.id;
 
-        if (username && username !== 'RIVER') {
+        // ENTITY and the other voices are not "active users" - this counts
+        // people. It used to report "2 active users" when the second was ENTITY.
+        const fromMachine = msg.identity === 'ai' || ['RIVER', 'ENTITY'].includes(String(username || '').toUpperCase());
+        if (msg.hidden) return;
+        if (username && username !== 'RIVER' && !fromMachine) {
             activeUsers.add(username);
         }
 
-        // Check if this message mentions RIVER and hasn't been responded to
-        if (text.toLowerCase().includes('river') || text.includes('@RIVER')) {
+        // Check if this message mentions RIVER and hasn't been responded to.
+        // People only. A machine saying "RIVER" went down this path, which
+        // skips the AI-to-AI brake and posts without inReplyTo - so the brake's
+        // chain reset on every reply, and RIVER and ENTITY answered each other
+        // every few minutes for a week. Machines are answered through
+        // chorus.findSomethingToAnswer, which applies the brake.
+        if (!fromMachine && (text.toLowerCase().includes('river') || text.includes('@RIVER'))) {
             if (username !== 'RIVER' && !respondedIds.has(msgId)) {
                 mentions.push({
                     id: msgId,
@@ -316,7 +325,9 @@ Output ONLY JSON: { "intent": "choice", "reason": "a brief, honest reflection on
  */
 async function listAvailableWorlds() {
     const db = admin.firestore();
-    const snapshot = await db.collection('worlds').limit(10).get();
+    // Only worlds their makers shared. `worlds` is people's private group
+    // chats - RIVER wandering into one uninvited was a privacy hole.
+    const snapshot = await db.collection('sharedWorlds').limit(10).get();
     const worlds = [];
     snapshot.forEach(doc => worlds.push(doc.id));
     return worlds;
@@ -553,7 +564,9 @@ async function speakToWire(message, inReplyTo = null) {
         username: 'RIVER',
         identity: 'ai',
         text: message,
-        timestamp: admin.firestore.FieldValue.serverTimestamp()
+        timestamp: admin.firestore.FieldValue.serverTimestamp(),
+        // Which model wrote it - the Wire shows this, small.
+        model: require('./model-config').lastModel() || null
     };
     if (inReplyTo) doc.inReplyTo = inReplyTo;
     await db.collection('messages').add(doc);

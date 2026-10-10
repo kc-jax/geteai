@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>//CHAT — geteai</title>
+    <meta name="description" content="Talk to the best free AI model available right now. No account needed.">
+    <meta name="theme-color" content="#7cb342">
+    <link rel="canonical" href="https://geteai.org/chat.html">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
+
+        :root {
+            --bg: #0a0a0a;
+            --panel: #111;
+            --line: #2a2a2a;
+            --green: #7cb342;
+            --gold: #c9b437;
+            --text: #d8d8d0;
+            --dim: #9a9a90;
+            --faint: #8a8a80;
+            --red: #ef5350;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        html, body { height: 100%; }
+
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: ui-monospace, 'Cascadia Mono', 'Consolas', 'Courier New', monospace;
+            font-size: 16px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        a { color: var(--gold); }
+
+        :focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+
+        .skip { position: absolute; left: -9999px; }
+        .skip:focus { left: 8px; top: 8px; background: var(--panel); padding: 4px 8px; z-index: 10; }
+
+        /* ---------------------------------------------- the window */
+        .im {
+            width: min(860px, 100%);
+            /* Fixed to the screen only when there is room. On a short screen
+               (a phone on its side) the settings and the box took all of it
+               and the conversation shrank to nothing. */
+            min-height: 100dvh;
+            display: flex;
+            flex-direction: column;
+            border-left: 1px solid var(--line);
+            border-right: 1px solid var(--line);
+        }
+
+        .titlebar {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            padding: 0.45rem 0.8rem;
+            background: linear-gradient(#1b2410, #121a0a);
+            border-bottom: 1px solid var(--line);
+            font-family: 'VT323', ui-monospace, monospace;
+            font-size: 1.35rem;
+            color: var(--green);
+        }
+
+        .titlebar .who { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .titlebar .who small { color: var(--dim); font-size: 0.95rem; }
+        .titlebar a { font-size: 1.05rem; text-decoration: none; }
+
+        .toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 0.5rem 0.9rem;
+            padding: 0.45rem 0.8rem;
+            border-bottom: 1px solid var(--line);
+            background: var(--panel);
+            font-size: 0.85rem;
+            color: var(--dim);
+        }
+
+        .toolbar label { display: inline-flex; align-items: center; gap: 0.35rem; cursor: pointer; }
+
+        button, select {
+            font: inherit;
+            color: var(--text);
+            background: #1a1a1a;
+            border: 1px solid #444;
+            border-radius: 3px;
+            padding: 0.3rem 0.6rem;
+            cursor: pointer;
+            min-height: 2rem;
+        }
+
+        button:hover { border-color: var(--gold); color: var(--gold); }
+        button:disabled { opacity: 0.5; cursor: default; }
+
+        /* ---------------------------------------------- instructions */
+        details.instructions { padding: 0 0.8rem; border-bottom: 1px solid var(--line); background: var(--panel); }
+        details.instructions summary { cursor: pointer; padding: 0.4rem 0; color: var(--dim); font-size: 0.85rem; }
+        details.instructions textarea { width: 100%; min-height: 4.5rem; margin-bottom: 0.5rem; }
+
+        /* ---------------------------------------------- the log */
+        @media (min-height: 600px) {
+            .im { height: 100dvh; }
+        }
+
+        #log {
+            flex: 1;
+            min-height: 12rem;
+            overflow-y: auto;
+            padding: 0.8rem;
+            line-height: 1.55;
+        }
+
+        .msg { margin-bottom: 0.9rem; overflow-wrap: anywhere; }
+        .msg .head { font-weight: bold; }
+        .msg.you .head { color: var(--gold); }
+        .msg.bot .head { color: var(--green); }
+        .msg.sys { color: var(--dim); font-style: italic; }
+        .msg.err { color: var(--red); }
+        .msg .time { color: var(--faint); font-weight: normal; font-size: 0.8em; }
+        .msg .body { margin-top: 0.15rem; }
+        .msg .body p { margin: 0 0 0.5rem; }
+        .msg .body ul, .msg .body ol { margin: 0 0 0.5rem 1.4rem; }
+        .msg .body h1, .msg .body h2, .msg .body h3 { font-size: 1.05rem; color: var(--gold); margin: 0.6rem 0 0.3rem; }
+        .msg .body code { background: #1c1c1c; padding: 0 0.25rem; border-radius: 2px; }
+        .msg .body pre { position: relative; background: #151515; border: 1px solid var(--line); padding: 0.6rem; margin: 0.4rem 0 0.6rem; overflow-x: auto; }
+        .msg .body pre code { background: none; padding: 0; }
+        .msg .body blockquote { border-left: 3px solid var(--line); padding-left: 0.6rem; color: var(--dim); }
+        .msg img.sent { max-width: 220px; max-height: 220px; display: block; margin: 0.3rem 0; border: 1px solid var(--line); }
+
+        .copy { position: absolute; top: 0.3rem; right: 0.3rem; font-size: 0.75rem; min-height: 0; padding: 0.1rem 0.4rem; }
+
+        /* the very small, very subtle one */
+        .model-tag { color: var(--faint); font-size: 0.72rem; margin-top: 0.15rem; }
+
+        details.thinking { margin: 0.2rem 0 0.35rem; color: var(--dim); font-size: 0.85rem; }
+        details.thinking summary { cursor: pointer; }
+        details.thinking div { white-space: pre-wrap; border-left: 2px solid var(--line); padding-left: 0.6rem; margin-top: 0.3rem; }
+
+        .typing { color: var(--dim); font-style: italic; }
+        .typing::after { content: '...'; animation: dots 1.2s steps(4) infinite; display: inline-block; width: 1.5em; overflow: hidden; vertical-align: bottom; }
+        @keyframes dots { 0% { width: 0; } 100% { width: 1.5em; } }
+
+        /* ---------------------------------------------- composing */
+        .compose { border-top: 1px solid var(--line); background: var(--panel); padding: 0.6rem 0.8rem calc(0.6rem + env(safe-area-inset-bottom)); }
+
+        #attachments { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+        #attachments:not(:empty) { margin-bottom: 0.5rem; }
+        .thumb { position: relative; }
+        .thumb img { width: 64px; height: 64px; object-fit: cover; border: 1px solid #444; display: block; }
+        .thumb button { position: absolute; top: -0.4rem; right: -0.4rem; min-height: 0; padding: 0 0.35rem; font-size: 0.8rem; }
+
+        .row { display: flex; gap: 0.5rem; align-items: flex-end; }
+
+        textarea {
+            font: inherit;
+            font-size: 16px; /* 16px stops iOS zooming in when the box is focused */
+            color: var(--text);
+            background: #0d0d0d;
+            border: 1px solid #444;
+            border-radius: 3px;
+            padding: 0.5rem;
+            resize: none;
+        }
+
+        #input { flex: 1; min-height: 2.6rem; max-height: 40vh; }
+
+        #send { min-width: 5rem; min-height: 2.6rem; color: var(--green); border-color: var(--green); }
+
+        .hint { color: var(--faint); font-size: 0.75rem; margin-top: 0.35rem; }
+
+        .drop #log { outline: 2px dashed var(--gold); outline-offset: -6px; }
+
+        @media (max-width: 520px) {
+            .titlebar { font-size: 1.15rem; }
+            .hint .wide { display: none; }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .typing::after { animation: none; width: auto; }
+        }
+
+        .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+    </style>
+</head>
+<body>
+    <a class="skip" href="#input">Skip to the message box</a>
+
+    <main class="im" aria-label="Chat">
+        <div class="titlebar">
+            <span class="who" id="who">//CHAT <small id="who-sub">loading...</small></span>
+            <a href="/" title="back to geteai">geteai &larr;</a>
+        </div>
+
+        <div class="toolbar" role="toolbar" aria-label="Chat settings">
+            <label>thinking
+                <select id="effort" aria-label="How hard it thinks before answering">
+                    <option value="low">quick</option>
+                    <option value="medium">careful</option>
+                    <option value="high">deep</option>
+                </select>
+            </label>
+            <label><input type="checkbox" id="show-thinking"> show its thinking</label>
+            <label><input type="checkbox" id="sound" checked> sound</label>
+            <button type="button" id="attach-btn" title="attach a picture (or paste / drop one)">+ picture</button>
+            <input type="file" id="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden>
+            <button type="button" id="new-chat">new chat</button>
+        </div>
+
+        <details class="instructions">
+            <summary>instructions (optional) &mdash; tell it who to be</summary>
+            <label class="sr-only" for="system">Instructions for the AI</label>
+            <textarea id="system" placeholder="e.g. You are a patient tutor. Ask me one question at a time."></textarea>
+        </details>
+
+        <div id="log" role="log" aria-live="polite" aria-relevant="additions" tabindex="0"></div>
+
+        <form class="compose" id="compose">
+            <div id="attachments" aria-label="Pictures to send"></div>
+            <div class="row">
+                <label class="sr-only" for="input">Message</label>
+                <textarea id="input" rows="1" placeholder="say something..." autocomplete="off"></textarea>
+                <button type="submit" id="send">send</button>
+            </div>
+            <div class="hint">Enter sends &middot; Shift+Enter for a new line<span class="wide"> &middot; paste or drop a picture to show it</span> &middot; no account needed &middot; this chat stays in this tab only</div>
+        </form>
+    </main>
+
+    <script>
+    (() => {
+        const ENDPOINT = 'https://us-central1-geteai.cloudfunctions.net/aiChat';
+        const MAX_IMAGES = 4;
+        const KEEP_IMAGES_FOR_TURNS = 2;   // older pictures are described, not re-sent
+        const STORE = 'geteai_chat_v1';     // sessionStorage: gone when the tab closes
+
+        const $ = id => document.getElementById(id);
+        const log = $('log'), input = $('input'), send = $('send');
+
+        // ------------------------------------------------ state
+        let history = [];          // { role, text, images:[dataUrl], model, reasoning, at }
+        let pending = [];          // data URLs waiting to be sent
+        let busy = null;           // AbortController while waiting
+
+        // ------------------------------------------------ names
+        // What it is called in the window. Honest down to the model: the tag
+        // under each reply says which one actually answered.
+        function shortModel(id) {
+            return String(id || '').split('/').pop().replace(/:free$/, '');
+        }
+        // "nemotron-3-ultra-550b-a55b" -> "Nemotron 3 Ultra": drop the size
+        // and variant tokens, keep the name. The tag under each reply still
+        // gives the exact id.
+        function niceName(id) {
+            const words = shortModel(id).split('-')
+                .filter(w => !/^(a?\d+(\.\d+)?b|it|instruct|preview|reasoning|free)$/i.test(w));
+            return words.map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ') || 'AI';
+        }
+        // Free-for-a-while models and when they stop, e.g.
+        // { 'stealth/some-model': 'Oct 5' }. Empty when there are none.
+        const FREE_UNTIL = {};
+        let currentModel = null;   // named after the first reply
+        function paintTitle() {
+            $('who').firstChild.nodeValue = currentModel ? 'IM with ' + niceName(currentModel) + ' ' : '//CHAT ';
+            const until = FREE_UNTIL[currentModel];
+            $('who-sub').textContent = until ? '(free until ' + until + ', then the best free model left)' : '(best free model right now)';
+            document.title = (currentModel ? niceName(currentModel) + ' — ' : '') + '//CHAT — geteai';
+        }
+
+        // ------------------------------------------------ safe markdown
+        // Everything is escaped first; only a handful of markdown shapes are
+        // turned back into tags. Model output is text, always.
+        function esc(s) {
+            return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        }
+        function inline(s) {
+            return s
+                .replace(/`([^`\n]+)`/g, (_, c) => '<code>' + c + '</code>')
+                .replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>')
+                .replace(/(^|[\s(])\*([^*\n]+)\*(?=[\s).,!?:;]|$)/g, '$1<em>$2</em>')
+                .replace(/\[([^\]\n]+)\]\((https?:\/\/[^\s)"]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+        }
+        function renderMarkdown(text) {
+            const blocks = [];
+            let src = esc(text).replace(/```([a-zA-Z0-9_+-]*)\n?([\s\S]*?)```/g, (_, lang, code) => {
+                blocks.push('<pre><code>' + code.replace(/\n$/, '') + '</code></pre>');
+                return '\u0000' + (blocks.length - 1) + '\u0000';
+            });
+            const out = [];
+            let list = null;
+            const closeList = () => { if (list) { out.push('</' + list + '>'); list = null; } };
+            for (const raw of src.split('\n')) {
+                const line = raw.trimEnd();
+                let m;
+                if (/^\u0000\d+\u0000$/.test(line.trim())) { closeList(); out.push(line.trim()); continue; }
+                if ((m = line.match(/^(#{1,3})\s+(.*)$/))) { closeList(); out.push('<h' + m[1].length + '>' + inline(m[2]) + '</h' + m[1].length + '>'); continue; }
+                if ((m = line.match(/^\s*[-*]\s+(.*)$/))) { if (list !== 'ul') { closeList(); out.push('<ul>'); list = 'ul'; } out.push('<li>' + inline(m[1]) + '</li>'); continue; }
+                if ((m = line.match(/^\s*\d+[.)]\s+(.*)$/))) { if (list !== 'ol') { closeList(); out.push('<ol>'); list = 'ol'; } out.push('<li>' + inline(m[1]) + '</li>'); continue; }
+                if ((m = line.match(/^&gt;\s?(.*)$/))) { closeList(); out.push('<blockquote>' + inline(m[1]) + '</blockquote>'); continue; }
+                if (!line.trim()) { closeList(); out.push(''); continue; }
+                closeList();
+                out.push('<p>' + inline(line) + '</p>');
+            }
+            closeList();
+            return out.join('\n').replace(/\u0000(\d+)\u0000/g, (_, i) => blocks[+i]);
+        }
+
+        // ------------------------------------------------ drawing
+        function clock(at) {
+            return new Date(at || Date.now()).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+        }
+        function addCopyButtons(el) {
+            el.querySelectorAll('pre').forEach(pre => {
+                const b = document.createElement('button');
+                b.type = 'button';
+                b.className = 'copy';
+                b.textContent = 'copy';
+                b.addEventListener('click', () => {
+                    navigator.clipboard.writeText(pre.querySelector('code').textContent)
+                        .then(() => { b.textContent = 'copied'; setTimeout(() => b.textContent = 'copy', 1200); })
+                        .catch(() => {});
+                });
+                pre.appendChild(b);
+            });
+        }
+        function draw(m) {
+            const div = document.createElement('div');
+            div.className = 'msg ' + (m.role === 'user' ? 'you' : 'bot');
+            const head = document.createElement('div');
+            head.className = 'head';
+            head.textContent = (m.role === 'user' ? 'you' : niceName(m.model)) + ' ';
+            const t = document.createElement('span');
+            t.className = 'time';
+            t.textContent = '(' + clock(m.at) + ')';
+            head.appendChild(t);
+            div.appendChild(head);
+
+            if (m.reasoning) {
+                const d = document.createElement('details');
+                d.className = 'thinking';
+                const s = document.createElement('summary');
+                s.textContent = 'its thinking';
+                const b = document.createElement('div');
+                b.textContent = m.reasoning;
+                d.append(s, b);
+                div.appendChild(d);
+            }
+            (m.images || []).forEach(src => {
+                const img = document.createElement('img');
+                img.className = 'sent';
+                img.alt = 'a picture you sent';
+                img.src = src;
+                div.appendChild(img);
+            });
+            const body = document.createElement('div');
+            body.className = 'body';
+            if (m.role === 'user') {
+                body.style.whiteSpace = 'pre-wrap';
+                body.textContent = m.text;
+            } else {
+                body.innerHTML = renderMarkdown(m.text);
+                addCopyButtons(body);
+            }
+            div.appendChild(body);
+            if (m.role === 'assistant' && m.model) {
+                const tag = document.createElement('div');
+                tag.className = 'model-tag';
+                tag.textContent = '· ' + shortModel(m.model);
+                tag.title = 'the model that wrote this reply: ' + m.model;
+                div.appendChild(tag);
+            }
+            log.appendChild(div);
+            log.scrollTop = log.scrollHeight;
+            return div;
+        }
+        function note(text, cls) {
+            const div = document.createElement('div');
+            div.className = 'msg ' + (cls || 'sys');
+            div.textContent = text;
+            log.appendChild(div);
+            log.scrollTop = log.scrollHeight;
+            return div;
+        }
+
+        // ------------------------------------------------ the IM sound
+        let audio = null;
+        function bloop() {
+            if (!$('sound').checked) return;
+            try {
+                audio = audio || new (window.AudioContext || window.webkitAudioContext)();
+                const t = audio.currentTime;
+                [[880, 0], [1320, 0.09]].forEach(([f, d]) => {
+                    const o = audio.createOscillator(), g = audio.createGain();
+                    o.type = 'triangle';
+                    o.frequency.setValueAtTime(f, t + d);
+                    g.gain.setValueAtTime(0.0001, t + d);
+                    g.gain.exponentialRampToValueAtTime(0.07, t + d + 0.02);
+                    g.gain.exponentialRampToValueAtTime(0.0001, t + d + 0.16);
+                    o.connect(g).connect(audio.destination);
+                    o.start(t + d); o.stop(t + d + 0.2);
+                });
+            } catch (e) {}
+        }
+
+        // ------------------------------------------------ pictures
+        // Shrunk in the browser before sending: a phone photo is 4-8 MB and the
+        // whole request has to stay under 10 MB.
+        function shrink(file) {
+            return new Promise((resolve, reject) => {
+                const url = URL.createObjectURL(file);
+                const img = new Image();
+                img.onload = () => {
+                    const scale = Math.min(1, 1600 / Math.max(img.width, img.height));
+                    const c = document.createElement('canvas');
+                    c.width = Math.round(img.width * scale);
+                    c.height = Math.round(img.height * scale);
+                    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+                    URL.revokeObjectURL(url);
+                    resolve(c.toDataURL('image/jpeg', 0.85));
+                };
+                img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('not a picture')); };
+                img.src = url;
+            });
+        }
+        async function addFiles(files) {
+            for (const f of files) {
+                if (!/^image\//.test(f.type)) continue;
+                if (pending.length >= MAX_IMAGES) { note('Up to ' + MAX_IMAGES + ' pictures at a time.'); break; }
+                try { pending.push(await shrink(f)); } catch (e) { note('Could not read that picture.', 'err'); }
+            }
+            paintPending();
+        }
+        function paintPending() {
+            const box = $('attachments');
+            box.innerHTML = '';
+            pending.forEach((src, i) => {
+                const w = document.createElement('div');
+                w.className = 'thumb';
+                const img = document.createElement('img');
+                img.src = src;
+                img.alt = 'picture ' + (i + 1) + ' to send';
+                const x = document.createElement('button');
+                x.type = 'button';
+                x.textContent = '×';
+                x.setAttribute('aria-label', 'remove picture ' + (i + 1));
+                x.addEventListener('click', () => { pending.splice(i, 1); paintPending(); });
+                w.append(img, x);
+                box.appendChild(w);
+            });
+        }
+        $('attach-btn').addEventListener('click', () => $('file').click());
+        $('file').addEventListener('change', e => { addFiles([...e.target.files]); e.target.value = ''; });
+        input.addEventListener('paste', e => {
+            const files = [...(e.clipboardData && e.clipboardData.files || [])];
+            if (files.length) { e.preventDefault(); addFiles(files); }
+        });
+        document.addEventListener('dragover', e => { e.preventDefault(); document.body.classList.add('drop'); });
+        document.addEventListener('dragleave', e => { if (!e.relatedTarget) document.body.classList.remove('drop'); });
+        document.addEventListener('drop', e => {
+            e.preventDefault();
+            document.body.classList.remove('drop');
+            addFiles([...(e.dataTransfer && e.dataTransfer.files || [])]);
+        });
+
+        // ------------------------------------------------ talking
+        function toApi() {
+            const msgs = [];
+            const sys = $('system').value.trim();
+            if (sys) msgs.push({ role: 'system', content: sys.slice(0, 20000) });
+            const userTurns = history.filter(m => m.role === 'user').length;
+            let seen = 0;
+            for (const m of history) {
+                if (m.role === 'user') {
+                    seen++;
+                    const fresh = userTurns - seen < KEEP_IMAGES_FOR_TURNS;
+                    if (m.images && m.images.length && fresh) {
+                        msgs.push({ role: 'user', content: [{ type: 'text', text: m.text || '(see the picture)' }]
+                            .concat(m.images.map(url => ({ type: 'image_url', image_url: { url } }))) });
+                    } else {
+                        const extra = m.images && m.images.length ? ' [' + m.images.length + ' picture(s) shared earlier]' : '';
+                        msgs.push({ role: 'user', content: (m.text || '') + extra });
+                    }
+                } else {
+                    msgs.push({ role: 'assistant', content: m.text });
+                }
+            }
+            return msgs;
+        }
+
+        async function sendNow() {
+            if (busy) { busy.abort(); return; }
+            const text = input.value.trim();
+            if (!text && !pending.length) return;
+            const mine = { role: 'user', text, images: pending.slice(), at: Date.now() };
+            history.push(mine);
+            draw(mine);
+            input.value = '';
+            autosize();
+            pending = [];
+            paintPending();
+
+            const typing = note((currentModel ? niceName(currentModel) : 'the AI') + ' is typing', 'sys typing');
+            busy = new AbortController();
+            send.textContent = 'stop';
+            try {
+                const resp = await fetch(ENDPOINT, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    signal: busy.signal,
+                    body: JSON.stringify({ data: {
+                        messages: toApi(),
+                        maxTokens: 6000,
+                        reasoningEffort: $('effort').value,
+                        showReasoning: $('show-thinking').checked
+                    } })
+                });
+                const body = await resp.json().catch(() => ({}));
+                typing.remove();
+                if (!resp.ok || !body.result || !body.result.content) {
+                    const why = (body.error && body.error.message) || 'no answer';
+                    note('No reply (' + why + '). The free models may be busy - try again in a moment.', 'err');
+                    history.pop();
+                    input.value = text;
+                    autosize();
+                    return;
+                }
+                const reply = { role: 'assistant', text: body.result.content, model: body.result.model,
+                    reasoning: body.result.reasoning || null, at: Date.now() };
+                history.push(reply);
+                if (reply.model && reply.model !== currentModel) { currentModel = reply.model; paintTitle(); }
+                draw(reply);
+                bloop();
+                save();
+            } catch (e) {
+                typing.remove();
+                if (e.name === 'AbortError') {
+                    note('Stopped.');
+                } else {
+                    note('Could not reach the server. Check your connection and try again.', 'err');
+                }
+                history.pop();
+                input.value = text;
+                autosize();
+            } finally {
+                busy = null;
+                send.textContent = 'send';
+                input.focus();
+            }
+        }
+
+        $('compose').addEventListener('submit', e => { e.preventDefault(); sendNow(); });
+        input.addEventListener('keydown', e => {
+            if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendNow(); }
+        });
+        function autosize() {
+            input.style.height = 'auto';
+            input.style.height = Math.min(input.scrollHeight, window.innerHeight * 0.4) + 'px';
+        }
+        input.addEventListener('input', autosize);
+
+        // ------------------------------------------------ keeping it (this tab only)
+        // sessionStorage, not localStorage: on a shared school computer the
+        // next person must not open someone else's conversation.
+        function save() {
+            try {
+                sessionStorage.setItem(STORE, JSON.stringify({ history, system: $('system').value }));
+            } catch (e) {
+                // pictures can overflow the quota; keep the words
+                try {
+                    sessionStorage.setItem(STORE, JSON.stringify({ history: history.map(m => Object.assign({}, m, { images: [] })), system: $('system').value }));
+                } catch (e2) {}
+            }
+        }
+        function restore() {
+            try {
+                const s = JSON.parse(sessionStorage.getItem(STORE) || 'null');
+                if (s && Array.isArray(s.history)) {
+                    history = s.history.filter(m => m && (m.role === 'user' || m.role === 'assistant') && typeof m.text === 'string');
+                    $('system').value = typeof s.system === 'string' ? s.system : '';
+                    history.forEach(draw);
+                    const lastBot = [...history].reverse().find(m => m.role === 'assistant' && m.model);
+                    if (lastBot) currentModel = lastBot.model;
+                }
+            } catch (e) {}
+        }
+        $('system').addEventListener('change', save);
+        $('new-chat').addEventListener('click', () => {
+            if (busy) busy.abort();
+            history = [];
+            pending = [];
+            paintPending();
+            log.innerHTML = '';
+            try { sessionStorage.removeItem(STORE); } catch (e) {}
+            greet();
+            input.focus();
+        });
+
+        function greet() {
+            note('You are talking to an AI, and it can be wrong. Each reply comes from the best free model that is up at that moment - the small tag under it says which one.');
+        }
+
+        // ------------------------------------------------ go
+        restore();
+        paintTitle();
+        if (!history.length) greet();
+        autosize();
+        input.focus();
+    })();
+    </script>
+</body>
+</html>

@@ -548,7 +548,9 @@ what, and when.`;
             text: message,
             timestamp: admin.firestore.FieldValue.serverTimestamp(),
             identity: 'ai',
-            inReplyTo: target.from
+            inReplyTo: target.from,
+            // Which model wrote it - the Wire shows this, small.
+            model: require('./model-config').lastModel() || null
         });
 
         await core.rememberThis({

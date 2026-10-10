@@ -11,6 +11,11 @@ echo ==============================================================
 echo  Deploying geteai.org
 echo ==============================================================
 
+REM The functions take ~7s to load on this machine, and the CLI gives up at
+REM 10s by default ("User code failed to load ... Timeout after 10000"), so
+REM deploys failed at random. Give it a minute.
+set FUNCTIONS_DISCOVERY_TIMEOUT=60
+
 if not exist "functions\.env" (
     echo [WARNING] functions\.env not found!
     echo Your Cloud Functions will have no OpenRouter API key.
@@ -40,6 +45,18 @@ call node scripts\check-calls.js
 if errorlevel 1 (
     echo.
     echo ABORTING: a call has no definition.
+    goto :end
+)
+
+echo.
+echo [0c/3] Running the server tests (impersonation, write path, filters)...
+REM These once lived only in a temp folder and were lost with it. They catch
+REM the bugs that have actually happened here: posting as someone else,
+REM reading someone's private Construct, a reasoning leak reaching the Wire.
+call node scripts\test-server.js
+if errorlevel 1 (
+    echo.
+    echo ABORTING: a server test failed.
     goto :end
 )
 

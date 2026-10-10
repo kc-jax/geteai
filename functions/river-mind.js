@@ -240,12 +240,9 @@ async function updateState(oldState, didSpeak, newFocus, worldChange = null) {
         newState.currentWorld = null;
     }
 
-    // 5% mood drift
-    if (Math.random() < 0.05) {
-        const moods = ['excited', 'curious', 'peaceful', 'melancholic', 'restless', 'contemplative'];
-        newState.mood = moods[Math.floor(Math.random() * moods.length)];
-        console.log(`RIVER: Mood drifted to ${newState.mood}`);
-    }
+    // (A 5% random "mood drift" used to live here - a dice roll that could
+    // land on melancholic or contemplative for no reason at all. Mood is now
+    // set each wake from what actually happened; see riverHeartbeat.)
 
     if (newFocus) newState.focus = newFocus;
 

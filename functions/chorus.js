@@ -70,7 +70,8 @@ async function recentWire(limit = 15) {
         .orderBy('timestamp', 'desc')
         .limit(limit)
         .get();
-    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    // Hidden messages (see hideLeaks) are not part of the conversation.
+    return snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(m => !m.hidden);
 }
 
 /**

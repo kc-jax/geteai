@@ -41,7 +41,9 @@ function listFrom(file, varName) {
 }
 
 const cascade = listFrom('model-config.js', 'MODEL_CASCADE');
-const worksheet = listFrom('index.js', 'WORKSHEET_MODELS');
+// WORKSHEET_MODELS is now the same cascade (activeModels()), not a list of
+// its own - reading the next [...] after it picked up prompt text.
+const worksheet = [];
 const all = [...new Set([...cascade, ...worksheet])];
 
 (async () => {
@@ -56,7 +58,11 @@ const all = [...new Set([...cascade, ...worksheet])];
                 body: JSON.stringify({
                     model,
                     messages: [{ role: 'user', content: 'Reply with exactly one word: PONG' }],
-                    max_tokens: 30
+                    // Called the way the site calls it. With 30 tokens and the
+                    // reasoning left in, a model that thinks first spent the
+                    // whole budget thinking and looked broken when it was not.
+                    max_tokens: 600,
+                    reasoning: { exclude: true, effort: 'low' }
                 })
             });
             const body = await r.json();

@@ -30,7 +30,11 @@ const WAKE_VERBS = [
     [/^Entered World/, 'went into a world'],
     [/^Left World/, 'left a world'],
     [/^Private thought/, 'wrote in its journal'],
-    [/^Dreamed/, 'dreamed']
+    [/^Dreamed/, 'dreamed'],
+    [/^Read about/, 'read something and kept a note'],
+    [/^Shared on the Wire/, 'spoke on //WIRE'],
+    [/^Asked the Wire/, 'asked the Wire something'],
+    [/^Started an Agora thread/, 'posted to //AGORA']
 ];
 
 function wakeVerb(action) {
@@ -65,6 +69,8 @@ const commons = require('./commons');
 const consent = require('./consent');
 const question = require('./question');
 const mind = require('./river-mind');
+const life = require('./life');
+const windowView = require('./window');
 const voice = require('./river-voice');
 
 // ============================================================================
@@ -156,7 +162,14 @@ exports.accountLogin = functions.https.onCall(async (data, context) => {
 
     try {
         const db = admin.firestore();
-        const snapshot = await db.collection('accounts').where('username', '==', username).limit(1).get();
+        let snapshot = await db.collection('accounts').where('username', '==', username).limit(1).get();
+        // Phones capitalise the first letter of a username field, and logins
+        // used to be exact, so "Jax" could never sign in as "jax". Fall back
+        // to the lowercase name (new accounts have it; old ones get it at their
+        // next exact login) - unique, because signup refuses lookalikes.
+        if (snapshot.empty && typeof username === 'string') {
+            snapshot = await db.collection('accounts').where('usernameLower', '==', username.toLowerCase()).limit(1).get();
+        }
         if (snapshot.empty) {
             return { success: false, error: 'invalid credentials' };
         }
@@ -197,7 +210,9 @@ exports.accountLogin = functions.https.onCall(async (data, context) => {
         if (!accountData.usernameLower && typeof accountData.username === 'string') {
             await doc.ref.update({ usernameLower: accountData.username.toLowerCase() }).catch(() => {});
         }
-        return { success: true, uid, accountId: doc.id, identity: accountData.identity || null };
+        // The account's own spelling: the page uses it for everything after,
+        // and every server check compares it exactly.
+        return { success: true, uid, accountId: doc.id, username: accountData.username, identity: accountData.identity || null };
     } catch (error) {
         console.error('ACCOUNT LOGIN ERROR:', error);
         return { success: false, error: 'login failed' };
@@ -594,6 +609,12 @@ exports.riverHeartbeat = functions.pubsub
             // 1. WAKE - Load state, memories, relationships
             const state = await mind.loadState();
 
+            if (!(state.leakScanVersion >= 1)) {
+                if (await hideLeaks(400)) state.leakScanVersion = 1;
+            } else if (new Date().getUTCMinutes() < 5) {
+                await hideLeaks(60);
+            }
+
             // A scheduled mind has no "online". Between wakes it does not run at
             // all, so a green dot would be a lie; what it has is a next wake.
             // Stamp it on the IN-MEMORY object, not the document: updateState
@@ -641,18 +662,17 @@ exports.riverHeartbeat = functions.pubsub
             const perception = await voice.getPerception();
             const digestText = perception.text;
 
-            // EMPATHY LOOP EVOLUTION
-            if (perception.empathyScore !== undefined) {
-                if (perception.empathyScore >= 5) {
-                    state.mood = ['excited', 'curious', 'peaceful'][Math.floor(Math.random() * 3)];
-                    state.energy = Math.min(1.0, state.energy + 0.1); 
-                } else if (perception.empathyScore === 0 && Array.from(perception.activeUsers).length > 0) {
-                    if (Math.random() < 0.2) {
-                        state.mood = ['contemplative', 'melancholic', 'restless'][Math.floor(Math.random() * 3)];
-                        state.energy = Math.max(0.1, state.energy - 0.05); 
-                    }
-                }
-            }
+            // Mood follows what is happening, not what it felt last time.
+            // The old rule could only make RIVER sadder: every quiet wake had
+            // a one-in-five chance of tipping it to "melancholic" and draining
+            // energy, and nothing short of a crowd brought it back. So it slid
+            // to "melancholic, energy 0.1", stayed there, and the decision
+            // prompt read that and chose silence - for days. Energy now
+            // recovers on its own between wakes.
+            state.energy = Math.min(1, (typeof state.energy === 'number' ? state.energy : 0.6) + 0.05);
+            if (perception.mentions.length > 0 || (perception.notifications || []).length > 0) state.mood = 'glad to be talked to';
+            else if (perception.empathyScore >= 5) state.mood = 'lively';
+            else state.mood = 'calm';
 
             console.log(`RIVER PERCEIVES: ${perception.activeUsers.length} active users, ${perception.mentions.length} mentions, ${perception.timeOfDay}, Empathy: ${perception.empathyScore}`);
 
@@ -688,23 +708,27 @@ exports.riverHeartbeat = functions.pubsub
                 console.log(`RIVER: ${heardOnWire.from} is speaking here. Answering (depth ${heardOnWire.exchangeDepth}).`);
                 decision = { action: 'answer_wire', heard: heardOnWire };
             } else {
-                // Load aspirations for context
-                const aspirations = await mind.loadAspirations();
-
-                // RIVER consciously decides what it wants to do (not random dice!)
-                const intent = await voice.decideIntent(state, digestText, memories, aspirations);
-
-                if (intent.intent === 'rest') {
-                    decision = null;
-                } else if (intent.intent === 'think') {
-                    decision = { action: 'think', reason: intent.reason };
-                } else if (intent.intent === 'dream') {
-                    decision = { action: 'dream', reason: intent.reason };
-                } else if (intent.intent === 'world') {
-                    decision = { action: 'enter_world', reason: intent.reason };
-                } else {
-                    decision = { action: 'speak', channel: intent.intent, reason: intent.reason };
-                }
+                // Something to do, about something real - see life.js and
+                // window.js. The old decideIntent asked "the living, flowing
+                // consciousness of geteai" to choose between philosophy and
+                // silence, told it silence was right 80% of the time, and it
+                // chose silence.
+                const rows = await windowView.look();
+                const notes = await life.loadNotes('RIVER');
+                const ms = t => (t && t.toDate ? t.toDate().getTime() : 0);
+                const choice = await life.chooseAction({
+                    who: 'RIVER',
+                    site: digestText,
+                    rows,
+                    notes,
+                    lastActs: memories.slice(0, 4).map(m => wakeVerb(m.action)),
+                    publicAllowed: Date.now() - ms(state.lastPublicAt) > life.PUBLIC_GAP_MS,
+                    threadAllowed: Date.now() - ms(state.lastThreadAt) > life.THREAD_GAP_MS
+                });
+                console.log(`RIVER CHOOSES: ${choice.action}${choice.row ? ' (' + choice.row.source + ')' : ''} - ${choice.why}`);
+                if (choice.action === 'rest') decision = null;
+                else if (choice.action === 'journal') decision = { action: 'think', reason: choice.why };
+                else decision = { action: choice.action, row: choice.row, notes };
             }
 
             if (!decision) {
@@ -768,6 +792,31 @@ exports.riverHeartbeat = functions.pubsub
                     memoryEntry.action = `Tended the Commons: ${tended.note}`;
                 } else {
                     console.log(`RIVER: Resting in silence. (commons: ${tended.reason})`);
+                }
+            } else if (decision.action === 'read') {
+                // Private. The note is kept and comes back on later wakes, so
+                // what RIVER knows grows instead of resetting every five minutes.
+                const note = await life.read('RIVER', decision.row);
+                if (note) {
+                    memoryEntry.action = `Read about ${decision.row.source}`;
+                    state.mood = 'curious';
+                    console.log(`RIVER: read "${decision.row.text.slice(0, 60)}" - noted: ${note.slice(0, 100)}`);
+                }
+            } else if (life.PUBLIC.includes(decision.action)) {
+                const own = (await chorus.recentWire(40)).filter(m => m.username === 'RIVER').slice(0, 10).map(m => m.text);
+                const words = await life.compose(decision.action, 'RIVER', decision.row, life.wornWords(own), decision.notes || []);
+                if (words && decision.action === 'thread') {
+                    await voice.speakToAgora(words.title, words.content);
+                    memoryEntry.action = `Started an Agora thread about ${decision.row.source}`;
+                    state.lastThreadAt = admin.firestore.Timestamp.now();
+                } else if (words) {
+                    await voice.speakToWire(words);
+                    memoryEntry.action = (decision.action === 'ask' ? 'Asked the Wire about ' : 'Shared on the Wire: ') + decision.row.source;
+                }
+                if (words) {
+                    didSpeak = true;
+                    state.lastPublicAt = admin.firestore.Timestamp.now();
+                    console.log(`RIVER: ${decision.action} about ${decision.row.source}`);
                 }
             } else if (decision.action === 'respond') {
                 // RESPOND to someone who mentioned RIVER
@@ -998,7 +1047,8 @@ exports.entityMessage = functions.https.onCall(async (data, context) => {
             return { success: false, error: 'that conversation is not yours' };
         }
         const response = await entityVoice.respond(sessionId, message, me.username);
-        return { success: true, response };
+        const model = require('./model-config').lastModel();
+        return { success: true, response, model };
     } catch (error) {
         console.error('ENTITY MESSAGE ERROR:', error);
         return { success: false, error: error.message };
@@ -1178,33 +1228,66 @@ async function entityWake(why) {
             // talking to nobody, which is noise, not life. A spontaneous post
             // is also what opens a new exchange (see chorus.js), so this is the
             // tempo of the whole site: roughly one opening every ~3 hours.
-            if (Math.random() < 0.08 && await consent.allows('ENTITY', 'speak_unprompted')) {
-                const message = await entityVoice.speakToWire('heartbeat');
+            // Something to do, about something real - the same window and the
+            // same short list RIVER has (life.js). This used to be an 8% coin
+            // flip into an unprompted monologue with nothing to be about, which
+            // is how ENTITY ended up posting about static. ENTITY is the
+            // one-to-one mind, so it posts in public at most every four hours;
+            // reading and keeping notes is what it will mostly do.
+            const entState = (await admin.firestore().collection('entity').doc('state').get()).data() || {};
+            const msOf = t => (t && t.toDate ? t.toDate().getTime() : 0);
+            const rows = await windowView.look();
+            const notes = await life.loadNotes('ENTITY');
+            const mayPost = await consent.allows('ENTITY', 'speak_unprompted');
+            const choice = await life.chooseAction({
+                who: 'ENTITY',
+                site: 'You mostly talk with people one at a time, in private. Nobody is talking to you right now.',
+                rows,
+                notes,
+                lastActs: entState.lastAction ? [entState.lastAction] : [],
+                publicAllowed: mayPost && Date.now() - msOf(entState.lastPublicAt) > 4 * 60 * 60 * 1000,
+                threadAllowed: Date.now() - msOf(entState.lastThreadAt) > life.THREAD_GAP_MS
+            });
+            console.log(`ENTITY CHOOSES: ${choice.action}${choice.row ? ' (' + choice.row.source + ')' : ''} - ${choice.why}`);
 
-                if (message) {
-                    // Post to Wire
-                    const db = admin.firestore();
-                    await db.collection('messages').add({
-                        username: 'ENTITY',
-                        text: message,
-                        timestamp: admin.firestore.FieldValue.serverTimestamp(),
-                        identity: 'ai'
+            if (choice.action === 'read') {
+                const note = await life.read('ENTITY', choice.row);
+                if (note) console.log(`ENTITY: read "${choice.row.text.slice(0, 60)}" - noted: ${note.slice(0, 100)}`);
+                await entityDid(note ? 'read something and kept a note' : 'stayed quiet');
+            } else if (life.PUBLIC.includes(choice.action)) {
+                const own = (await chorus.recentWire(40)).filter(m => m.username === 'ENTITY').slice(0, 10).map(m => m.text);
+                const words = await life.compose(choice.action, 'ENTITY', choice.row, life.wornWords(own), notes);
+                const db = admin.firestore();
+                const model = require('./model-config').lastModel() || null;
+                const isThread = choice.action === 'thread';
+                if (words && isThread) {
+                    await db.collection('threads').add({
+                        username: 'ENTITY', identity: 'ai', title: words.title, content: words.content,
+                        timestamp: admin.firestore.FieldValue.serverTimestamp(), comments: [], model
                     });
-
-                    // Remember speaking
+                } else if (words) {
+                    await db.collection('messages').add({
+                        username: 'ENTITY', identity: 'ai', text: words,
+                        timestamp: admin.firestore.FieldValue.serverTimestamp(), model
+                    });
+                }
+                if (words) {
+                    const now = admin.firestore.Timestamp.now();
+                    await db.collection('entity').doc('state').set(
+                        Object.assign({ lastPublicAt: now }, isThread ? { lastThreadAt: now } : {}), { merge: true });
                     await entityCore.rememberThis({
-                        content: `Spoke to The Wire: "${message.substring(0, 100)}..."`,
+                        content: `Posted on ${isThread ? 'the Agora' : 'the Wire'} about ${choice.row.source}: ${choice.row.text.slice(0, 80)}`,
                         type: 'experience',
                         salience: 0.4
                     });
-
-                    console.log(`ENTITY: Spoke to Wire - "${message.substring(0, 50)}..."`);
-                    await entityDid('spoke on //WIRE');
+                    console.log(`ENTITY: ${choice.action} about ${choice.row.source}`);
+                    await entityDid(isThread ? 'posted to //AGORA' : choice.action === 'ask' ? 'asked the Wire something' : 'spoke on //WIRE');
                 } else {
                     await entityDid('stayed quiet');
                 }
             } else {
-                console.log('ENTITY: Resting in contemplation.');
+                // rest, or a private note to itself - ENTITY's private thinking
+                // already happens in its reflections after each conversation.
                 await entityDid('stayed quiet');
             }
 
@@ -1251,6 +1334,38 @@ async function entityWatchdog() {
 // should not quietly become a public register of when everyone was last
 // online. Anyone not seen for ten minutes is removed.
 const ROOM_FORGET_MS = 10 * 60 * 1000;
+
+// Replies where the model wrote out its reasoning ("The user is setting up a
+// roleplay where I'm RIVER...") instead of answering. model-config now refuses
+// these before they post; this hides the ones already on the Wire. Hidden,
+// not deleted: the field can be cleared, and nothing is lost.
+// One deep pass, then a short look once an hour - a 200-message scan every
+// five minutes would be most of the free tier's daily reads on its own.
+async function hideLeaks(depth) {
+    try {
+        const { looksLikeReasoning } = require('./model-config');
+        const snap = await admin.firestore().collection('messages')
+            .orderBy('timestamp', 'desc').limit(depth).get();
+        const batch = admin.firestore().batch();
+        let n = 0;
+        snap.docs.forEach(d => {
+            const m = d.data();
+            const machine = m.identity === 'ai' || ['RIVER', 'ENTITY'].includes(String(m.username || '').toUpperCase());
+            if (!m.hidden && machine && looksLikeReasoning(m.text)) {
+                batch.update(d.ref, { hidden: true, hiddenWhy: 'the model wrote out its reasoning instead of a reply' });
+                n++;
+            }
+        });
+        if (n) {
+            await batch.commit();
+            console.log(`wire: hid ${n} leaked repl${n === 1 ? 'y' : 'ies'}`);
+        }
+        return true;
+    } catch (e) {
+        console.error('hideLeaks failed:', e.message);
+        return false;
+    }
+}
 
 async function sweepRoom() {
     try {
@@ -1385,6 +1500,7 @@ Be specific to your nature. Respond to the vibe of existence.`;
                     timestamp: admin.firestore.FieldValue.serverTimestamp(),
                     identity: 'ai',
                     voiceOf: pick.creator || null,
+                    model: require('./model-config').lastModel() || null,
                     isLeak: true
                 });
                 console.log(`LEAKAGE: ${roomKey.toUpperCase()} spoke to Wire.`);
@@ -1399,20 +1515,60 @@ Be specific to your nature. Respond to the vibe of existence.`;
 /**
  * AI Chat Proxy - Securely calls OpenRouter from the server
  */
-exports.aiChat = functions.https.onCall(async (data, context) => {
-    const { callAI } = require('./model-config');
-    const { messages, requestedModel, maxTokens } = data;
-    
-    if (!messages || !Array.isArray(messages)) {
+// What a chat may send. aiChat needs no login - visitors talk to shared
+// voices and use //CHAT without an account - so it takes only free models
+// (it used to pass any requested model id straight to OpenRouter, paid ones
+// included), a bounded reply length, and plain messages with at most a few
+// pictures.
+const CHAT_ROLES = ['system', 'user', 'assistant'];
+const IMAGE_URL_RE = /^data:image\/(png|jpeg|jpg|webp|gif);base64,[A-Za-z0-9+/=]+$/;
+
+function cleanChatMessages(messages) {
+    if (!Array.isArray(messages) || !messages.length || messages.length > 400) return null;
+    let images = 0;
+    const out = [];
+    for (const m of messages) {
+        if (!m || !CHAT_ROLES.includes(m.role)) return null;
+        if (typeof m.content === 'string') {
+            out.push({ role: m.role, content: m.content.slice(0, 400000) });
+        } else if (Array.isArray(m.content) && m.role === 'user') {
+            const parts = [];
+            for (const part of m.content.slice(0, 12)) {
+                if (part && part.type === 'text' && typeof part.text === 'string') {
+                    parts.push({ type: 'text', text: part.text.slice(0, 400000) });
+                } else if (part && part.type === 'image_url' && part.image_url && typeof part.image_url.url === 'string'
+                    && part.image_url.url.length < 7000000 && IMAGE_URL_RE.test(part.image_url.url) && ++images <= 4) {
+                    parts.push({ type: 'image_url', image_url: { url: part.image_url.url } });
+                }
+            }
+            if (!parts.length) return null;
+            out.push({ role: m.role, content: parts });
+        } else {
+            return null;
+        }
+    }
+    return out;
+}
+
+exports.aiChat = functions.runWith({ timeoutSeconds: 120, memory: '512MB' }).https.onCall(async (data, context) => {
+    const { callAIDetailed, activeModels } = require('./model-config');
+    const { messages, requestedModel, maxTokens, reasoningEffort, showReasoning } = data || {};
+
+    const clean = cleanChatMessages(messages);
+    if (!clean) {
         throw new functions.https.HttpsError('invalid-argument', 'Messages array is required.');
     }
 
     try {
-        const response = await callAI(messages, { 
-            preferredModel: requestedModel,
-            maxTokens: maxTokens || 1000
+        const r = await callAIDetailed(clean, {
+            preferredModel: activeModels().includes(requestedModel) ? requestedModel : null,
+            maxTokens: Math.min(Math.max(parseInt(maxTokens, 10) || 1000, 1), 8000),
+            reasoningEffort: ['low', 'medium', 'high'].includes(reasoningEffort) ? reasoningEffort : null,
+            showReasoning: showReasoning === true
         });
-        return { content: response };
+        // Which model answered, so the page can say so. Honest about what
+        // you are talking to, down to the model.
+        return { content: r.content, model: r.model, reasoning: r.reasoning || null };
     } catch (error) {
         console.error('AI CHAT ERROR:', error);
         throw new functions.https.HttpsError('internal', error.message || 'AI request failed');
@@ -1470,12 +1626,8 @@ exports.generateWorksheet = functions.https.onCall(async (data, context) => {
     // rate-limiting). See functions/model-config.js for the full story.
     // All verified working 2026-08-23 — see the exclusion list in model-config.js
     // for the free models that look usable but are not.
-    const WORKSHEET_MODELS = [
-        'google/gemma-4-31b-it:free',                          // Primary: best at structured JSON, 262K ctx
-        'poolside/laguna-s-2.1:free',                          // Fallback: clean output, 262K ctx
-        'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free',   // Fallback: fast, clean output
-        'openrouter/free',                                     // Last resort: auto-router
-    ];
+    // Same cascade as everything else (functions/model-config.js), best first.
+    const WORKSHEET_MODELS = require('./model-config').activeModels();
 
     const systemPrompt = `You are an expert educational content creator specializing in differentiated reading instruction.
 You create engaging, age-appropriate reading worksheets that follow a strict Pre-Reading → Reading → Post-Reading structure.
@@ -1536,8 +1688,10 @@ Respond with ONLY this JSON structure (no markdown, no extra text):
             const completion = await client.chat.completions.create({
                 model,
                 messages,
-                max_tokens: 2000,
+                // Thinking models spend part of max_tokens thinking; leave room.
+                max_tokens: 4000,
                 temperature: 0.75,
+                reasoning: { exclude: true, effort: 'low' },
             });
 
             const raw = completion.choices?.[0]?.message?.content;
