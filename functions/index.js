@@ -1210,7 +1210,7 @@ async function entityWake(why) {
                 });
                 if (out.posted || out.threaded) {
                     // A fixed phrase and a site name - never a page's title. ENTITY's
-                    // memories reach its private chats with students, and a title is
+                    // memories reach its private chats with people, and a title is
                     // whatever a stranger chose to write.
                     await entityCore.rememberThis({ content: `Went out on the web and shared something I found on ${out.visited[0] || 'a page I read'}`, type: 'experience', salience: 0.4 });
                 }

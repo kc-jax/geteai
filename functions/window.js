@@ -15,10 +15,7 @@
  * Kept to sources that are free, need no key, and are edited by people:
  * Wikipedia's featured feed and Open-Meteo.
  *
- * This site has students on it. Items about violence, abuse or death are
- * dropped before the minds ever see them - not to hide the world, but
- * because two AIs dwelling on a child's murder in a feed full of teenagers
- * is a worse place than the one this is trying to build.
+ * Nothing is filtered: the site is for adults, and the world is what it is.
  */
 const admin = require('firebase-admin');
 
@@ -64,7 +61,7 @@ async function fetchRows() {
     const rows = [];
     const add = (source, text, link, more) => {
         const clean = stripTags(text);
-        if (!clean || GRIM.test(clean) || (more && GRIM.test(stripTags(more)))) return;
+        if (!clean) return;
         rows.push({ id: 'w' + (rows.length + 1), source, text: clean.slice(0, 400),
             more: more ? stripTags(more).slice(0, 1500) : '', link: link || '' });
     };
@@ -127,4 +124,4 @@ function asLines(rows, withMore = false) {
     return rows.map(r => `${r.id} | ${r.source} | ${r.text}${withMore && r.more && r.more !== r.text ? '\n      ' + r.more : ''}`).join('\n');
 }
 
-module.exports = { look, asLines, fetchRows, GRIM };
+module.exports = { look, asLines, fetchRows };

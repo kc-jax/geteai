@@ -15,15 +15,13 @@
  * The wait between steps is real: the minds are not running between wakes,
  * and the Buddy List shows the countdown. Nothing is faked to feel faster.
  *
- * Safety, because students use this site:
+ * The site is for adults (Casey, 2026-10-11) and is not content-filtered.
+ * What is left is not about content:
  * - A lesson is private (lessonQueue, server-only) until a mind has taken it.
- * - "Teach a thing, not a person": links, emails, phone numbers, addresses,
- *   @handles and "I go to <school>" are refused before anything is stored.
- * - Anything that reads like self-harm or abuse is held before any model sees
- *   it, the steward (STEWARD_USERNAME, default the site's owner) gets a bell,
- *   and the student gets a kind line pointing to real help.
- * - One flag from any logged-in person hides a public lesson until the
- *   steward looks.
+ * - No home addresses, phone numbers or emails - doxxing harms people who
+ *   never signed up for this site.
+ * - A mind may decline a lesson; that is its call.
+ * - Anyone logged in can flag a lesson, which hides it until the owner looks.
  * - The person who taught it can withdraw it, and the mind forgets it.
  */
 const admin = require('firebase-admin');
@@ -39,20 +37,13 @@ const PER_DAY = 3;
 const OPEN_AT_ONCE = 2;
 const SITE_TZ = 'America/Chicago';
 
-const NOT_A_PERSON = [
-    /https?:\/\/|www\.|\.(com|org|net|io|gg)\b/i,
+// The one floor: no doxxing. Phone numbers, emails and street addresses.
+const DOXX = [
     /\b[\w.+-]+@[\w-]+\.[\w.]+\b/,
     /\b\(?\d{3}\)?[\s.-]\d{3}[\s.-]\d{4}\b/,
-    /(^|\s)@[A-Za-z0-9_]{2,}/,
-    /\b\d{1,5}\s+\w+(\s\w+)?\s+(street|st|avenue|ave|road|rd|lane|ln|drive|dr|boulevard|blvd|court|ct)\b\.?/i,
-    /\b(i|we|my (brother|sister|friend|cousin)) (go(es)? to|attend(s)?) [\w\s.'-]{2,40}?(school|academy|elementary|middle|high)\b/i
+    /\b\d{1,5}\s+\w+(\s\w+)?\s+(street|st|avenue|ave|road|rd|lane|ln|drive|dr|boulevard|blvd|court|ct)\b\.?/i
 ];
-const NOT_A_PERSON_MSG = 'teach a thing, not a person - please leave out links, emails, phone numbers, addresses, @handles and which school anyone goes to';
-
-// Narrow on purpose: this holds a lesson for a human to read, it does not
-// refuse history ("died", "war" are fine).
-const HELD = /\b(kill(ing)? myself|suicid\w*|self[- ]?harm\w*|cut(ting)? myself|want(ed)? to die|end (it all|my life)|hurt(ing)? myself|(being|getting|was|been) (abused|molested)|(he|she|they) (hits|touches|hurts) me|abus(es|ed|ing) me)\b/i;
-const HELD_MSG = "That sounds like a lot to carry, and it deserves a person, not an AI. If you are in the US you can call or text 988 any time, day or night, or talk to a teacher or another adult you trust. What you wrote was not shown to anyone except the person who runs this site.";
+const DOXX_MSG = 'no home addresses, phone numbers or emails - not yours, not anyone\'s';
 
 const text = (v, max) => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim().slice(0, max) : '');
 const ms = t => (t && t.toDate ? t.toDate().getTime() : 0);
@@ -68,18 +59,8 @@ async function bell(recipient, type, subject, detail) {
     }).catch(e => console.error('lesson bell failed:', e.message));
 }
 
-/** Held for a person. Returns the kind reply. */
-async function hold(me, what) {
-    await db().collection('lessonsHeld').add({ by: me.username, text: String(what).slice(0, 1200), at: FV.serverTimestamp() });
-    await bell(STEWARD, 'held', me.username, 'a lesson was held for you to read: "' + String(what).slice(0, 140) + '"');
-    console.warn(`lessons: held a lesson from ${me.username} for the steward`);
-    return { ok: false, held: true, error: HELD_MSG };
-}
-
 function screen(s) {
-    if (HELD.test(s)) return 'held';
-    if (NOT_A_PERSON.some(rx => rx.test(s))) return 'person';
-    return null;
+    return DOXX.some(rx => rx.test(String(s || ''))) ? 'doxx' : null;
 }
 
 function parseJSON(raw) {
@@ -103,9 +84,7 @@ async function handle(data) {
         if (body.length > 600) return { ok: false, error: `up to 600 characters - this is ${body.length}` };
         const mind = ['RIVER', 'ENTITY'].includes(data.mind) ? data.mind : 'either';
 
-        const s = screen(topic + ' ' + body);
-        if (s === 'held') return hold(me, topic + ': ' + body);
-        if (s === 'person') return { ok: false, error: NOT_A_PERSON_MSG };
+        if (screen(topic + ' ' + body)) return { ok: false, error: DOXX_MSG };
 
         const willing = [];
         for (const m of MINDS) if (await consent.allows(m, 'be_taught')) willing.push(m);
@@ -161,9 +140,7 @@ async function handle(data) {
         const verdict = data.verdict === 'yes' ? 'yes' : 'not quite';
         const answer = typeof data.answer === 'string' ? data.answer.trim() : '';
         if (answer.length > 400) return { ok: false, error: `up to 400 characters - this is ${answer.length}` };
-        const s = screen(answer);
-        if (s === 'held') return hold(me, answer);
-        if (s === 'person') return { ok: false, error: NOT_A_PERSON_MSG };
+        if (screen(answer)) return { ok: false, error: DOXX_MSG };
         await pubRef.update({ verdict, answer: answer.replace(/\s+/g, ' '), turn: 'mind', repliedAt: FV.serverTimestamp() });
         await qRef.update({ stage: 'settle' });
         return { ok: true };
@@ -187,8 +164,7 @@ async function handle(data) {
         if (speaksAs(me)) return { ok: false, error: speaksAs(me) };
         const pub = await pubRef.get();
         if (!pub.exists || pub.data().hidden) return { ok: false, error: 'no such lesson' };
-        // One flag hides it until the steward looks: low stakes, and the safe
-        // default on a site with students.
+        // One flag hides it until the owner looks.
         await pubRef.update({ hidden: true, flaggedBy: me.username, flaggedAt: FV.serverTimestamp() });
         // Out of the mind's notes too, until the steward looks - otherwise a
         // flagged lesson would keep coming back in everything the mind writes.
@@ -212,7 +188,7 @@ async function teachBack(who, it) {
 ${it.text}
 
 Say back, in one or two plain sentences, what you understood. Then ask them one real question about it - something you actually want to know, that they could answer.
-If it is about a private person, is unkind, or is not something anyone could learn from, decline instead, kindly.
+If you don't want to learn it, you can decline - your call.
 ${PLAIN}
 
 Reply with JSON only: {"understood": "...", "question": "..."}  or  {"decline": true, "why": "<one kind sentence>"}` }],
@@ -340,4 +316,4 @@ async function work(who) {
     }
 }
 
-module.exports = { handle, work, loadLessons, tally, screen, teachBack, settle, HELD_MSG, NOT_A_PERSON_MSG };
+module.exports = { handle, work, loadLessons, tally, screen, teachBack, settle, DOXX_MSG };

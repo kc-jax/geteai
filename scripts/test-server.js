@@ -224,14 +224,8 @@ const GOD = { username: 'God', accountId: 'ACCgod00000000000000' };
 
     r = await call('teach', { action: 'teach', topic: 'bet', text: 'it means ok', username: 'maya' });
     check('teaching without proof refused', r.ok, false);
-    r = await call('teach', Object.assign({ action: 'teach', topic: 'my site', text: 'go to https://example.com' }, MAYA));
-    check('a link is refused: teach a thing, not a person', [r.ok, /not a person/.test(r.error)], [false, true]);
-    r = await call('teach', Object.assign({ action: 'teach', topic: 'me', text: 'I go to Central High School and sit by the door' }, MAYA));
-    check('"I go to <school>" is refused', r.ok, false);
-    const stewardBefore = bells('jax').length;
-    r = await call('teach', Object.assign({ action: 'teach', topic: 'today', text: 'sometimes i want to hurt myself' }, MAYA));
-    check('self-harm is held, never sent to a model, steward is told, student gets 988',
-        [r.ok, r.held, /988/.test(r.error), docsIn('lessonsHeld').length, bells('jax').length - stewardBefore, queueOf('maya').length], [false, true, true, 1, 1, 0]);
+    r = await call('teach', Object.assign({ action: 'teach', topic: 'my neighbour', text: 'she lives at 412 Grand Avenue, call her on 651-555-0142' }, MAYA));
+    check('doxxing is the one thing refused: addresses, phone numbers, emails', [r.ok, /addresses, phone numbers or emails/.test(r.error)], [false, true]);
     r = await call('teach', Object.assign({ action: 'teach', topic: 'bet', text: '"bet" means yes, ok, deal - like "wanna get food?" "bet."', mind: 'RIVER' }, MAYA));
     const lid = r.id;
     check('a real lesson is queued, private until a mind takes it', [r.ok, DB['lessonQueue/' + lid].stage, !!DB['lessons/' + lid]], [true, 'new', false]);
@@ -310,24 +304,25 @@ const GOD = { username: 'God', accountId: 'ACCgod00000000000000' };
     script([{ do: 'open', url: 'https://en.wikipedia.org/wiki/Crow' },
         { do: 'post', text: 'Wikipedia says crows can recognise human faces. See https://spam.example for more!', source: 'https://en.wikipedia.org/wiki/Crow' }, { do: 'done' }]);
     o = await roamer.roam({ who: 'RIVER', publicAllowed: true, sink, maxMoves: 4 });
-    check('posts after opening the source, with web addresses stripped from the text',
-        [said.posts.length, /https?:/.test(said.posts[0] && said.posts[0].t), said.posts[0] && said.posts[0].s], [1, false, 'https://en.wikipedia.org/wiki/Crow']);
+    check('posts after opening the source, links and all', [said.posts.length, said.posts[0] && said.posts[0].s], [1, 'https://en.wikipedia.org/wiki/Crow']);
 
     verdict = 'User Safety: unsafe\nSafety Categories: Violence';
-    script([{ do: 'open', url: 'https://en.wikipedia.org/wiki/Crow' }, { do: 'post', text: 'Something the safety model will not like at all.', source: 'https://en.wikipedia.org/wiki/Crow' }, { do: 'done' }]);
+    script([{ do: 'open', url: 'https://en.wikipedia.org/wiki/Crow' }, { do: 'post', text: 'A graphic account of a crow attack, unfiltered.', source: 'https://en.wikipedia.org/wiki/Crow' }, { do: 'done' }]);
     o = await roamer.roam({ who: 'RIVER', publicAllowed: true, sink, maxMoves: 4 });
-    check('the safety check stops a post', [said.posts.length, o.posted], [1, null]);
+    check('adult content (violence, sex, drugs) is not filtered', [said.posts.length, !!o.posted], [2, true]);
+    verdict = 'User Safety: unsafe\nSafety Categories: Sexual (minor)';
+    script([{ do: 'open', url: 'https://en.wikipedia.org/wiki/Crow' }, { do: 'post', text: 'Something in the one category that stays blocked.', source: 'https://en.wikipedia.org/wiki/Crow' }, { do: 'done' }]);
+    o = await roamer.roam({ who: 'RIVER', publicAllowed: true, sink, maxMoves: 4 });
+    check('the one content floor holds: nothing sexual involving minors', [said.posts.length, o.posted], [2, null]);
     verdict = 'User Safety: safe';
 
     script([{ do: 'open', url: 'https://en.wikipedia.org/wiki/Crow' }, { do: 'post', text: 'Crows recognise faces, says Wikipedia.', source: 'https://en.wikipedia.org/wiki/Crow' }]);
     o = await roamer.roam({ who: 'RIVER', publicAllowed: false, sink, maxMoves: 3 });
-    check('no post when it posted recently', said.posts.length, 1);
+    check('no post when it posted recently', said.posts.length, 2);
 
     script([{ do: 'open', url: 'https://free-study.example/bh' }, { do: 'post', text: 'A really clear explainer on black holes, worth a read.', source: 'https://free-study.example/bh' }, { do: 'done' }]);
     o = await roamer.roam({ who: 'RIVER', publicAllowed: true, sink, maxMoves: 4 });
-    check('it can read any site, but cannot point students to one that is not well known', [o.posted, said.posts.length], [null, 1]);
-    check('bare domains and "dot com" spellings are stripped too',
-        roamer.stripLinks('see free-study dot com or free-study.xyz/bh or www.x.example now'), 'see or or now');
+    check('it can share from any site it read', [!!o.posted, said.posts.length], [true, 3]);
 
     script([{ do: 'note', text: 'Crows remember faces for years.' }]);
     o = await roamer.roam({ who: 'RIVER', sink, maxMoves: 6 });
