@@ -338,6 +338,23 @@ const GOD = { username: 'God', accountId: 'ACCgod00000000000000' };
     o = await roamer.roam({ who: 'RIVER', sink, maxMoves: 5 });
     check('a session never makes more model calls than its moves', calls, 5);
 
+    // ---------------- following stories across sessions
+    let followed = null;
+    const fsink = Object.assign({}, sink, { follow: async (w, list) => { followed = list; } });
+    script([{ do: 'follow', story: 'Nobel prizes 2026' }, { do: 'follow', story: 'IceCube neutrinos' }, { do: 'done' }]);
+    o = await roamer.roam({ who: 'RIVER', sink: fsink, maxMoves: 4 });
+    check('it can follow stories, and they are saved', (followed || []).map(f => f.story), ['Nobel prizes 2026', 'IceCube neutrinos']);
+    const before2 = followed.map(f => f.checked);
+    await new Promise(res => setTimeout(res, 5));
+    script([{ do: 'search', q: 'nobel chemistry asymmetric' }, { do: 'unfollow', story: 'IceCube neutrinos' }, { do: 'done' }]);
+    o = await roamer.roam({ who: 'RIVER', sink: fsink, maxMoves: 4, following: followed });
+    check('looking into a story marks it checked; unfollow drops it',
+        [followed.length, followed[0].story, followed[0].checked > before2[0]], [1, 'Nobel prizes 2026', true]);
+    script(Array.from({ length: 10 }, (_, n) => ({ do: 'follow', story: 'story number ' + n })));
+    o = await roamer.roam({ who: 'RIVER', sink: fsink, maxMoves: 10, following: [] });
+    check('at most eight stories at once', followed.length, 8);
+    check('every session knows the date', /\d{4}/.test(roamer.siteNow()), true);
+
     web.search = realSearch; web.open = realOpen; mc.openai.chat.completions.create = realCreate;
     mc.callAI = realCall;
 

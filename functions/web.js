@@ -316,7 +316,7 @@ async function search(q) {
             getJSON(`https://hn.algolia.com/api/v1/search?query=${enc}&tags=story&hitsPerPage=5`)
                 .then(j => (j.hits || []).filter(h => h.url).map(h => ({ from: 'Hacker News', title: strip(h.title), url: h.url,
                     snippet: `${h.points || 0} points, ${h.num_comments || 0} comments` }))),
-            getJSON(`https://api.gdeltproject.org/api/v2/doc/doc?query=${enc}%20sourcelang:english&mode=artlist&maxrecords=5&format=json&sort=hybridrel`)
+            getJSON(`https://api.gdeltproject.org/api/v2/doc/doc?query=${enc}%20sourcelang:english&mode=artlist&maxrecords=6&format=json&sort=hybridrel&timespan=7d`)
                 .then(j => (j.articles || []).map(a => ({ from: 'news (' + a.domain + ')', title: strip(a.title), url: a.url, snippet: '' })))
         ];
         if (process.env.BRAVE_KEY) {

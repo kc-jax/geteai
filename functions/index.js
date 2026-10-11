@@ -721,13 +721,13 @@ exports.riverHeartbeat = functions.runWith({ timeoutSeconds: 300, memory: '512MB
             } else {
                 // Time on the open web (roam.js) - search, read, follow links,
                 // keep notes, maybe post. No menu: it goes where its curiosity
-                // goes. Every 45 minutes, and only while today's free model
+                // goes. Every 30 minutes, and only while today's free model
                 // calls (1,000 a day for the whole site) have room left for
                 // people first. The rest of the time it rests WITHOUT a model
                 // call - deliberating every five minutes about whether to rest
                 // used to cost ~290 calls a day.
                 const ms = t => (t && t.toDate ? t.toDate().getTime() : 0);
-                const due = Date.now() - ms(state.lastRoamAt) > 45 * 60 * 1000;
+                const due = Date.now() - ms(state.lastRoamAt) > 30 * 60 * 1000;
                 if (due && (await modelConfig.freeCallsLeft()) > 300) {
                     decision = { action: 'roam' };
                 }
@@ -767,6 +767,7 @@ exports.riverHeartbeat = functions.runWith({ timeoutSeconds: 300, memory: '512MB
                 await admin.firestore().collection('river').doc('state').set({ lastRoamAt: state.lastRoamAt }, { merge: true });
                 const out = await roamer.roam({
                     who: 'RIVER',
+                    following: await roamer.loadFollowing('RIVER'),
                     notes: await life.loadNotes('RIVER', 8),
                     taught: await lessons.loadLessons('RIVER'),
                     wire: (await chorus.recentWire(8)),
@@ -1191,11 +1192,12 @@ async function entityWake(why) {
             // most every four hours.
             const entState = (await admin.firestore().collection('entity').doc('state').get()).data() || {};
             const msOf = t => (t && t.toDate ? t.toDate().getTime() : 0);
-            if (Date.now() - msOf(entState.lastRoamAt) > 3 * 60 * 60 * 1000 && (await modelConfig.freeCallsLeft()) > 300) {
+            if (Date.now() - msOf(entState.lastRoamAt) > 2 * 60 * 60 * 1000 && (await modelConfig.freeCallsLeft()) > 300) {
                 await admin.firestore().collection('entity').doc('state').set({ lastRoamAt: admin.firestore.Timestamp.now() }, { merge: true });
                 const mayPost = await consent.allows('ENTITY', 'speak_unprompted');
                 const out = await roamer.roam({
                     who: 'ENTITY',
+                    following: await roamer.loadFollowing('ENTITY'),
                     notes: await life.loadNotes('ENTITY', 8),
                     taught: await lessons.loadLessons('ENTITY'),
                     wire: (await chorus.recentWire(8)),
