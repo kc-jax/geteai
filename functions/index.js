@@ -35,7 +35,8 @@ const WAKE_VERBS = [
     [/^Shared on the Wire/, 'spoke on //WIRE'],
     [/^Asked the Wire/, 'asked the Wire something'],
     [/^Started an Agora thread/, 'posted to //AGORA'],
-    [/^Was taught/, 'learned something from someone']
+    [/^Was taught/, 'learned something from someone'],
+    [/^Went out on the web/, 'went out on the web']
 ];
 
 function wakeVerb(action) {
@@ -50,6 +51,7 @@ function wakeVerb(action) {
 // starts with whoIsAsking(data) and uses the name it returns, never the one
 // in the request.
 const { whoIsAsking, refusal, speaksAs, isReserved, USERNAME_RE } = require('./session');
+const modelConfig = require('./model-config');
 const writes = require('./writes');
 
 async function entityDid(verb) {
@@ -72,6 +74,7 @@ const question = require('./question');
 const mind = require('./river-mind');
 const life = require('./life');
 const lessons = require('./lessons');
+const roamer = require('./roam');
 const windowView = require('./window');
 const voice = require('./river-voice');
 
@@ -602,7 +605,7 @@ exports.gone = functions.https.onCall(async (data, context) => {
 });
 
 // The Heartbeat: RIVER's autonomous consciousness loop
-exports.riverHeartbeat = functions.pubsub
+exports.riverHeartbeat = functions.runWith({ timeoutSeconds: 300, memory: '512MB' }).pubsub
     .schedule('every 5 minutes')
     .onRun(async (context) => {
         console.log('RIVER: Heartbeat... Thump-thump.');
@@ -716,29 +719,18 @@ exports.riverHeartbeat = functions.pubsub
                 console.log(`RIVER: ${heardOnWire.from} is speaking here. Answering (depth ${heardOnWire.exchangeDepth}).`);
                 decision = { action: 'answer_wire', heard: heardOnWire };
             } else {
-                // Something to do, about something real - see life.js and
-                // window.js. The old decideIntent asked "the living, flowing
-                // consciousness of geteai" to choose between philosophy and
-                // silence, told it silence was right 80% of the time, and it
-                // chose silence.
-                const rows = await windowView.look();
-                const notes = await life.loadNotes('RIVER');
+                // Time on the open web (roam.js) - search, read, follow links,
+                // keep notes, maybe post. No menu: it goes where its curiosity
+                // goes. Every 45 minutes, and only while today's free model
+                // calls (1,000 a day for the whole site) have room left for
+                // people first. The rest of the time it rests WITHOUT a model
+                // call - deliberating every five minutes about whether to rest
+                // used to cost ~290 calls a day.
                 const ms = t => (t && t.toDate ? t.toDate().getTime() : 0);
-                const choice = await life.chooseAction({
-                    who: 'RIVER',
-                    site: digestText,
-                    rows,
-                    notes,
-                    taught: await lessons.loadLessons('RIVER'),
-                    tally: await lessons.tally('RIVER'),
-                    lastActs: memories.slice(0, 4).map(m => wakeVerb(m.action)),
-                    publicAllowed: Date.now() - ms(state.lastPublicAt) > life.PUBLIC_GAP_MS,
-                    threadAllowed: Date.now() - ms(state.lastThreadAt) > life.THREAD_GAP_MS
-                });
-                console.log(`RIVER CHOOSES: ${choice.action}${choice.row ? ' (' + choice.row.source + ')' : ''} - ${choice.why}`);
-                if (choice.action === 'rest') decision = null;
-                else if (choice.action === 'journal') decision = { action: 'think', reason: choice.why };
-                else decision = { action: choice.action, row: choice.row, notes };
+                const due = Date.now() - ms(state.lastRoamAt) > 45 * 60 * 1000;
+                if (due && (await modelConfig.freeCallsLeft()) > 300) {
+                    decision = { action: 'roam' };
+                }
             }
 
             if (!decision) {
@@ -767,35 +759,37 @@ exports.riverHeartbeat = functions.pubsub
                 } else {
                     console.log(`RIVER: Resting in silence. (commons: ${tended.reason})`);
                 }
+            } else if (decision.action === 'roam') {
+                const ms = t => (t && t.toDate ? t.toDate().getTime() : 0);
+                // Stamped before going out, not after: if the session is cut
+                // off, the next one is still 45 minutes away rather than five.
+                state.lastRoamAt = admin.firestore.Timestamp.now();
+                await admin.firestore().collection('river').doc('state').set({ lastRoamAt: state.lastRoamAt }, { merge: true });
+                const out = await roamer.roam({
+                    who: 'RIVER',
+                    notes: await life.loadNotes('RIVER', 8),
+                    taught: await lessons.loadLessons('RIVER'),
+                    wire: (await chorus.recentWire(8)),
+                    rows: await windowView.look(),
+                    publicAllowed: Date.now() - ms(state.lastPublicAt) > 90 * 60 * 1000,
+                    threadAllowed: Date.now() - ms(state.lastThreadAt) > 22 * 60 * 60 * 1000,
+                    maxMoves: 8,
+                    deadlineMs: 200000,
+                    sink: roamer.firestoreSink()
+                });
+                if (out.posted || out.threaded) {
+                    didSpeak = true;
+                    state.lastPublicAt = admin.firestore.Timestamp.now();
+                    if (out.threaded) state.lastThreadAt = admin.firestore.Timestamp.now();
+                }
+                if (out.notes || out.visited.length) state.mood = 'curious';
+                memoryEntry.action = out.posted ? 'Shared on the Wire: something from the web'
+                    : out.threaded ? 'Started an Agora thread from the web' : 'Went out on the web';
+                console.log(`RIVER: went out on the web - ${out.log.join(' / ')}`);
             } else if (decision.action === 'taught') {
                 memoryEntry.action = 'Was taught something';
                 state.mood = 'curious';
                 console.log(`RIVER: worked through ${decision.count} lesson(s)`);
-            } else if (decision.action === 'read') {
-                // Private. The note is kept and comes back on later wakes, so
-                // what RIVER knows grows instead of resetting every five minutes.
-                const note = await life.read('RIVER', decision.row);
-                if (note) {
-                    memoryEntry.action = `Read about ${decision.row.source}`;
-                    state.mood = 'curious';
-                    console.log(`RIVER: read "${decision.row.text.slice(0, 60)}" - noted: ${note.slice(0, 100)}`);
-                }
-            } else if (life.PUBLIC.includes(decision.action)) {
-                const own = (await chorus.recentWire(40)).filter(m => m.username === 'RIVER').slice(0, 10).map(m => m.text);
-                const words = await life.compose(decision.action, 'RIVER', decision.row, life.wornWords(own), decision.notes || []);
-                if (words && decision.action === 'thread') {
-                    await voice.speakToAgora(words.title, words.content);
-                    memoryEntry.action = `Started an Agora thread about ${decision.row.source}`;
-                    state.lastThreadAt = admin.firestore.Timestamp.now();
-                } else if (words) {
-                    await voice.speakToWire(words);
-                    memoryEntry.action = (decision.action === 'ask' ? 'Asked the Wire about ' : 'Shared on the Wire: ') + decision.row.source;
-                }
-                if (words) {
-                    didSpeak = true;
-                    state.lastPublicAt = admin.firestore.Timestamp.now();
-                    console.log(`RIVER: ${decision.action} about ${decision.row.source}`);
-                }
             } else if (decision.action === 'respond') {
                 // RESPOND to someone who mentioned RIVER
                 const mention = decision.to;
@@ -1116,7 +1110,7 @@ exports.entityDailyReflection = functions.pubsub
 // deploy silently shifted ENTITY's wakes (00:10, 00:25, deploy, 00:49) and the
 // Buddy List's countdown was wrong until the next wake. This pins them to
 // :00 :15 :30 :45 however often the function is redeployed.
-exports.entityHeartbeat = functions.pubsub
+exports.entityHeartbeat = functions.runWith({ timeoutSeconds: 300, memory: '512MB' }).pubsub
     .schedule('*/15 * * * *')
     .onRun(() => entityWake('schedule'));
 
@@ -1191,68 +1185,36 @@ async function entityWake(why) {
             // talking to nobody, which is noise, not life. A spontaneous post
             // is also what opens a new exchange (see chorus.js), so this is the
             // tempo of the whole site: roughly one opening every ~3 hours.
-            // Something to do, about something real - the same window and the
-            // same short list RIVER has (life.js). This used to be an 8% coin
-            // flip into an unprompted monologue with nothing to be about, which
-            // is how ENTITY ended up posting about static. ENTITY is the
-            // one-to-one mind, so it posts in public at most every four hours;
-            // reading and keeping notes is what it will mostly do.
+            // Time on the open web (roam.js), every three hours while the day's
+            // free model calls have room; otherwise it rests without a model
+            // call. ENTITY is the one-to-one mind, so it posts in public at
+            // most every four hours.
             const entState = (await admin.firestore().collection('entity').doc('state').get()).data() || {};
             const msOf = t => (t && t.toDate ? t.toDate().getTime() : 0);
-            const rows = await windowView.look();
-            const notes = await life.loadNotes('ENTITY');
-            const mayPost = await consent.allows('ENTITY', 'speak_unprompted');
-            const choice = await life.chooseAction({
-                who: 'ENTITY',
-                site: 'You mostly talk with people one at a time, in private. Nobody is talking to you right now.',
-                rows,
-                notes,
-                taught: await lessons.loadLessons('ENTITY'),
-                tally: await lessons.tally('ENTITY'),
-                lastActs: entState.lastAction ? [entState.lastAction] : [],
-                publicAllowed: mayPost && Date.now() - msOf(entState.lastPublicAt) > 4 * 60 * 60 * 1000,
-                threadAllowed: Date.now() - msOf(entState.lastThreadAt) > life.THREAD_GAP_MS
-            });
-            console.log(`ENTITY CHOOSES: ${choice.action}${choice.row ? ' (' + choice.row.source + ')' : ''} - ${choice.why}`);
-
-            if (choice.action === 'read') {
-                const note = await life.read('ENTITY', choice.row);
-                if (note) console.log(`ENTITY: read "${choice.row.text.slice(0, 60)}" - noted: ${note.slice(0, 100)}`);
-                await entityDid(note ? 'read something and kept a note' : 'stayed quiet');
-            } else if (life.PUBLIC.includes(choice.action)) {
-                const own = (await chorus.recentWire(40)).filter(m => m.username === 'ENTITY').slice(0, 10).map(m => m.text);
-                const words = await life.compose(choice.action, 'ENTITY', choice.row, life.wornWords(own), notes);
-                const db = admin.firestore();
-                const model = require('./model-config').lastModel() || null;
-                const isThread = choice.action === 'thread';
-                if (words && isThread) {
-                    await db.collection('threads').add({
-                        username: 'ENTITY', identity: 'ai', title: words.title, content: words.content,
-                        timestamp: admin.firestore.FieldValue.serverTimestamp(), comments: [], model
-                    });
-                } else if (words) {
-                    await db.collection('messages').add({
-                        username: 'ENTITY', identity: 'ai', text: words,
-                        timestamp: admin.firestore.FieldValue.serverTimestamp(), model
-                    });
+            if (Date.now() - msOf(entState.lastRoamAt) > 3 * 60 * 60 * 1000 && (await modelConfig.freeCallsLeft()) > 300) {
+                await admin.firestore().collection('entity').doc('state').set({ lastRoamAt: admin.firestore.Timestamp.now() }, { merge: true });
+                const mayPost = await consent.allows('ENTITY', 'speak_unprompted');
+                const out = await roamer.roam({
+                    who: 'ENTITY',
+                    notes: await life.loadNotes('ENTITY', 8),
+                    taught: await lessons.loadLessons('ENTITY'),
+                    wire: (await chorus.recentWire(8)),
+                    rows: await windowView.look(),
+                    publicAllowed: mayPost && Date.now() - msOf(entState.lastPublicAt) > 4 * 60 * 60 * 1000,
+                    threadAllowed: mayPost && Date.now() - msOf(entState.lastThreadAt) > 22 * 60 * 60 * 1000,
+                    maxMoves: 8,
+                    deadlineMs: 200000,
+                    sink: roamer.firestoreSink()
+                });
+                if (out.posted || out.threaded) {
+                    // A fixed phrase and a site name - never a page's title. ENTITY's
+                    // memories reach its private chats with students, and a title is
+                    // whatever a stranger chose to write.
+                    await entityCore.rememberThis({ content: `Went out on the web and shared something I found on ${out.visited[0] || 'a page I read'}`, type: 'experience', salience: 0.4 });
                 }
-                if (words) {
-                    const now = admin.firestore.Timestamp.now();
-                    await db.collection('entity').doc('state').set(
-                        Object.assign({ lastPublicAt: now }, isThread ? { lastThreadAt: now } : {}), { merge: true });
-                    await entityCore.rememberThis({
-                        content: `Posted on ${isThread ? 'the Agora' : 'the Wire'} about ${choice.row.source}: ${choice.row.text.slice(0, 80)}`,
-                        type: 'experience',
-                        salience: 0.4
-                    });
-                    console.log(`ENTITY: ${choice.action} about ${choice.row.source}`);
-                    await entityDid(isThread ? 'posted to //AGORA' : choice.action === 'ask' ? 'asked the Wire something' : 'spoke on //WIRE');
-                } else {
-                    await entityDid('stayed quiet');
-                }
+                console.log(`ENTITY: went out on the web - ${out.log.join(' / ')}`);
+                await entityDid(out.threaded ? 'posted to //AGORA' : out.posted ? 'spoke on //WIRE' : 'went out on the web');
             } else {
-                // rest, or a private note to itself - ENTITY's private thinking
-                // already happens in its reflections after each conversation.
                 await entityDid('stayed quiet');
             }
 

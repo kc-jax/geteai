@@ -190,6 +190,10 @@ async function handle(data) {
         // One flag hides it until the steward looks: low stakes, and the safe
         // default on a site with students.
         await pubRef.update({ hidden: true, flaggedBy: me.username, flaggedAt: FV.serverTimestamp() });
+        // Out of the mind's notes too, until the steward looks - otherwise a
+        // flagged lesson would keep coming back in everything the mind writes.
+        const fmind = pub.data().mind;
+        if (MINDS.includes(fmind)) await db().collection(fmind.toLowerCase()).doc('lessons').collection('entries').doc(id).delete().catch(() => {});
         await bell(STEWARD, 'flagged', pub.data().by, `${me.username} flagged a lesson: "${pub.data().topic}"`);
         return { ok: true };
     }

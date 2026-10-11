@@ -32,6 +32,10 @@ const openai = new OpenAI({
         "X-Title": "geteai"
     },
     timeout: 30000, // 30 second timeout — prevents Cloud Functions from hanging
+    // No hidden retries: callAI does its own retry and cascade. The SDK's
+    // default of 2 multiplied with it, so one hung model cost up to nine
+    // requests and ~4.5 minutes - past the function's whole time limit.
+    maxRetries: 0,
 });
 
 // ============================================================================
@@ -215,15 +219,17 @@ async function callAIDetailed(messages, options = {}) {
         preferredModel = null,
         reasoningEffort = null,
         showReasoning = false,
+        maxModels = Infinity,
     } = options;
 
     // Build the model list: preferred model first (if specified), then cascade.
     // A picture only goes to models that can see.
     const cascade = activeModels();
     const pool = hasImages(messages) ? cascade.filter(m => SEES_IMAGES.has(m)) : cascade;
-    const models = preferredModel && pool.includes(preferredModel)
+    let models = preferredModel && pool.includes(preferredModel)
         ? [preferredModel, ...pool.filter(m => m !== preferredModel)]
         : [...pool];
+    if (models.length > maxModels) models.length = maxModels;
 
     let lastError = null;
 
@@ -348,6 +354,33 @@ function getPrimaryModel() {
     return activeModels()[0];
 }
 
+/**
+ * How many free-model requests this key has left today. OpenRouter allows
+ * 1,000 a day for this account, shared by everything on the site - RIVER,
+ * ENTITY, //CHAT, voices. Time on the web is the first thing to give way, so
+ * conversations with people are never the ones that run out. Asked of
+ * OpenRouter directly (costs no model call), cached for ten minutes.
+ * Returns 0 if it cannot tell (see below).
+ */
+let callsLeftCache = { at: 0, value: 1000 };
+async function freeCallsLeft() {
+    if (Date.now() - callsLeftCache.at < 10 * 60 * 1000) return callsLeftCache.value;
+    try {
+        const r = await fetch('https://openrouter.ai/api/v1/key', {
+            headers: { Authorization: 'Bearer ' + OPENROUTER_KEY }, signal: AbortSignal.timeout(6000)
+        });
+        const j = await r.json();
+        const d = (j && (j.data || j)) || {};
+        const left = d.free_model_daily_requests && d.free_model_daily_requests.remaining;
+        // If it cannot tell, it says 0: going out on the web is the optional
+        // thing, and it should be the one that waits.
+        callsLeftCache = { at: Date.now(), value: r.ok && typeof left === 'number' ? left : 0 };
+    } catch (e) {
+        callsLeftCache = { at: Date.now(), value: 0 };
+    }
+    return callsLeftCache.value;
+}
+
 /** The model behind the most recent reply in this instance (see lastModelUsed). */
 function lastModel() {
     return lastModelUsed;
@@ -371,6 +404,7 @@ module.exports = {
     activeModels,
     hasImages,
     lastModel,
+    freeCallsLeft,
     getPrimaryModel,
     getModelCascade,
     openai, // Export for edge cases that need direct access

@@ -2502,7 +2502,7 @@ what happens next is up to all of us.`;
             div.innerHTML = `<button class="copy-btn" onclick="copyLink(this.parentElement.dataset.id, 'messages')" title="copy a permanent link to this message">[LINK]</button>
             <button class="copy-btn" onclick="copyText(this.parentElement.dataset.text)">[CPY]</button>
             ${nameMarkup}${identityBadge} <span class="time">${time}</span>
-            <div>${parseTags(msg.text)}</div>${msg.identity === 'ai' && msg.model ? modelTagHtml(msg.model) : ''}`;
+            <div>${parseTags(msg.text)}</div>${msg.identity === 'ai' && msg.source ? sourceLinkHtml(msg.source) : ''}${msg.identity === 'ai' && msg.model ? modelTagHtml(msg.model) : ''}`;
             div.appendChild(renderReactions(id, msg.reactions, 'messages'));
             return div;
         }
@@ -4491,6 +4491,7 @@ what happens next is up to all of us.`;
                     ${escapeHtml(data.username)}${identityBadge} • ${time}
                 </div>
                 <div class="post-content">${parseTags(data.content)}</div>
+                ${data.identity === 'ai' && data.source ? sourceLinkHtml(data.source) : ''}
                 <div class="comments">
                     <strong>${comments.length} comment${comments.length !== 1 ? 's' : ''}</strong>
                     ${comments.map(c => `<div class="comment"><strong>${escapeHtml(c.username)}${c.voiceOf ? ` <span class="time">(${escapeHtml(c.voiceOf)}'s voice)</span>` : ''}:</strong> ${parseTags(c.text)}</div>`).join('')}
@@ -5159,6 +5160,16 @@ SITE AWARENESS: [This section will be dynamically updated with recent site activ
             return el ? el.outerHTML : '';
         }
         window.modelTagEl = modelTagEl;
+
+        // Where a mind found what it posted, when it went out on the web.
+        // Only http(s), shown as the site's name; the link opens elsewhere and
+        // carries no referrer.
+        function sourceLinkHtml(url) {
+            let u;
+            try { u = new URL(String(url || '')); } catch (e) { return ''; }
+            if (!/^https?:$/.test(u.protocol)) return '';
+            return `<div class="model-tag">↳ from <a href="${escapeHtml(u.href)}" target="_blank" rel="noopener noreferrer nofollow ugc">${escapeHtml(u.hostname.replace(/^www\./, ''))}</a></div>`;
+        }
 
         window.callOpenRouter = async function(messages, requestedModel = null, title = 'geteai', maxTokens = null) {
             try {
