@@ -26,6 +26,10 @@ const lessons = require('./lessons');
 
 const SAFETY_MODEL = 'nvidia/nemotron-3.5-content-safety:free';
 
+function hostOf(url) {
+    try { return new URL(url).hostname.replace(/^www\./, ''); } catch (e) { return ''; }
+}
+
 // Links, in every spelling that slips past a plain URL pattern.
 const LINKISH = [
     /https?:\/\/\S+/gi,
